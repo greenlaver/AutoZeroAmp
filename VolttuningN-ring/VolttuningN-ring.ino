@@ -2,7 +2,7 @@
 
 #define I2C_MAX5816_ADDR 0x0f
 #define CH 4
-
+//hogehoge
 void MAX5816_write_command(byte cmd, byte dh, byte dl)
 {
 //  M5.begin();

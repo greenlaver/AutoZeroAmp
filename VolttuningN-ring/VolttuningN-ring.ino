@@ -62,7 +62,7 @@ void ADRead(int *a ) {
   }
 
   for (i = 0; i < 3; i++) {
-    a[i] = total[i] /16;                  // calculate the average:
+    a[i] = total[i] >> Shift;                  // calculate the average:
   }
   return (1);
 }
@@ -74,13 +74,13 @@ int times;
 void setup() {
   int i, j, k, l;
   int ChannelEnd[3] = {1, 1, 1};
-  int Threshold = 50; //Tunengのゴールとなる誤差　bit表記、”5”で　5*1000/1024*5=25mV　くらい
-  int Targetvol = 400; //in 10bit value Tuningのゴール,1.5V相当で
+  int Threshold = 20; //Tunengのゴールとなる誤差　bit表記、”5”で　5*1000/1024*5=25mV　くらい
+  int Targetvol = 750; //in 10bit value Tuningのゴール,1.5V相当で
   int TuneEnd = 1;
   float init_v = 2.3;
   int ADAvarege[3]; //読み込み値
 
-  Serial.begin(9600);
+  Serial.begin(57600);
   Wire.begin();
   //  MAX5816_write_command(0x20, 0x00, 0x0f); // POWER all DAC as normal
   //  MAX5816_write_command(0x30, 0x00, 0x0f); // CONFIG all DAC as transparent
@@ -102,7 +102,7 @@ void setup() {
 
     //readings[i][readIndex]に変な値が残るのを防ぐための処理
     if (times < 50){
-        Serial.println(times);
+//        Serial.println(times);
        continue;
     }
     
@@ -117,12 +117,24 @@ void setup() {
       //      Serial.println("abc");
       if (ChannelEnd[j] != 0) {
         //未処理チャンネルのみチューニングを続ける
+        Serial.print("Ch ");
+        Serial.print(j);
+        Serial.print(" ");
         Serial.print( ADAvarege[j] - Targetvol );
         Serial.print(",");
         
-        if ( abs(ADAvarege[j] - Targetvol) > Threshold ){
+        if ( ADAvarege[j] - Targetvol > Threshold ){
           set_v[j] = set_v[j] += 0.0005;
+          Serial.print("set_v[j] ");
+          Serial.print(set_v[j]);
           set_volt(j, set_v[j]);
+
+        }else if( ADAvarege[j] - Targetvol < -Threshold ){
+          set_v[j] = set_v[j] -= 0.0005;
+          Serial.print("set_v[j] ");
+          Serial.print(set_v[j]);
+          set_volt(j, set_v[j]);
+          
         }else {
           ChannelEnd[j] = 0; //Channl j の　Tuning終了
           Serial.print("channel : ");
@@ -137,17 +149,17 @@ void setup() {
     if (ChannelEnd[0] | ChannelEnd[1] | ChannelEnd[2]) {
       Serial.println("Tuning");    //未調整中
     } else {
-      Serial.print("Tuning End:");   //調整終了結果の表示
+      Serial.println("Tuning End:");   //調整終了結果の表示
       for (k = 0; k < 3; ++k) {
-        Serial.print("Ch"); Serial.print(k); Serial.print(": ");
-        Serial.print(set_v[k]); Serial.print(": ");
+        Serial.print("Ch "); Serial.print(k); Serial.print(": DA-Set ");
+        Serial.print(set_v[k]); Serial.print(": Current AD");
         Serial.println(ADAvarege[k]);
       }
       TuneEnd = 0;
       break;
     }
 
-    delay(100);
+    delay(300);
   } //Tuning 終了
 }
 
@@ -166,7 +178,7 @@ void loop() {
     //平均化計測値表示
     for (i = 0; i < 3; ++i) {
       set_volt(i, set_v[i]);
-      Serial.print(ADAvarege[i]);
+      Serial.print(analogRead(i) & 0x03ff);
       Serial.print(",");
     }
 

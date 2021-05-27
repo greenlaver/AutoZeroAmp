@@ -72,7 +72,7 @@ void flash()
 }
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   while (!Serial) {
     ; // USBケーブルが接続されるのを待つ。この待ちループは Leonardo のみ必要。
   }
@@ -93,7 +93,7 @@ void setup() {
     readings3[thisReading] = 0;
   }
 
-  MsTimer2::set(500, flash); // 500ms period
+  MsTimer2::set(5, flash); // 5ms period,1秒間に200回読み込み
   MsTimer2::start();
 }
 
@@ -114,14 +114,14 @@ void loop()
       dataFile.println(average3);
       dataFile.close();
       // シリアルポートにも出力
-//      Serial.print("A1ピンの値：");
-//      Serial.print(average);
-//      Serial.print(",");
-//      Serial.print("A2ピンの値：");
-//      Serial.print(average2);
-//      Serial.print(",");
-//      Serial.print("A3ピンの値：");
-//      Serial.println(average3);
+      Serial.print("A1ピンの値：");
+      Serial.print(average);
+      Serial.print(",");
+      Serial.print("A2ピンの値：");
+      Serial.print(average2);
+      Serial.print(",");
+      Serial.print("A3ピンの値：");
+      Serial.println(average3);
     }
     // ファイルが開けなかったらエラーを出力
     else {

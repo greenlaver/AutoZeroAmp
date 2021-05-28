@@ -45,6 +45,7 @@ const int Shift = 4;    //上記numReafingsの分、シフトする量。numReaf
 int readings[3][numReadings];      // the readings from the analog input
 int readIndex = 0;                 // the index of the current reading
 int total[3] = {0, 0, 0};          // the running total
+int ledPin = 13;      
 
 void ADRead(int *a ) {
   int i, j;
@@ -75,9 +76,9 @@ void setup() {
   int i, j, k, l;
   int ChannelEnd[3] = {1, 1, 1};
   int Threshold = 20; //Tunengのゴールとなる誤差　bit表記、”5”で　5*1000/1024*5=25mV　くらい
-  int Targetvol = 750; //in 10bit value Tuningのゴール,1.5V相当で
+  int Targetvol = 800; //in 10bit value Tuningのゴール,1.5V相当で
   int TuneEnd = 1;
-  float init_v = 2.3;
+  float init_v = 2.43;
   int ADAvarege[3]; //読み込み値
 
   Serial.begin(57600);
@@ -91,11 +92,18 @@ void setup() {
   for (i = 0; i < 3; ++i) {
     set_v[i] = init_v;
   }
+  pinMode(ledPin, OUTPUT);
+
+//  pinMode(ledPin, OUTPUT);
+  while (!Serial) {
+    ; // wait for serial port to connect. Needed for native USB port only
+  }
 
   Serial.println("start");
 
   //チューニング処理開始
   while (TuneEnd) {
+    digitalWrite(ledPin, HIGH);
     times++;
     //各チャンネルから読み込み
     ADRead(ADAvarege);
@@ -126,13 +134,13 @@ void setup() {
         if ( ADAvarege[j] - Targetvol > Threshold ){
           set_v[j] = set_v[j] += 0.0005;
           Serial.print("set_v[j] ");
-          Serial.print(set_v[j]);
+          Serial.print(set_v[j], 4);
           set_volt(j, set_v[j]);
 
         }else if( ADAvarege[j] - Targetvol < -Threshold ){
           set_v[j] = set_v[j] -= 0.0005;
           Serial.print("set_v[j] ");
-          Serial.print(set_v[j]);
+          Serial.print(set_v[j], 4);
           set_volt(j, set_v[j]);
           
         }else {
@@ -141,7 +149,6 @@ void setup() {
           Serial.print(j);
           Serial.println("end");
         }
-
       }
     }
 
@@ -149,18 +156,21 @@ void setup() {
     if (ChannelEnd[0] | ChannelEnd[1] | ChannelEnd[2]) {
       Serial.println("Tuning");    //未調整中
     } else {
+//      digitalWrite(ledPin, HIGH);
       Serial.println("Tuning End:");   //調整終了結果の表示
       for (k = 0; k < 3; ++k) {
         Serial.print("Ch "); Serial.print(k); Serial.print(": DA-Set ");
-        Serial.print(set_v[k]); Serial.print(": Current AD");
+        Serial.print(set_v[k], 4); Serial.print(": Current AD");
         Serial.println(ADAvarege[k]);
+        
       }
       TuneEnd = 0;
-      break;
+      digitalWrite(ledPin, LOW); 
+      break;//Tuning 終了
     }
-
-    delay(300);
-  } //Tuning 終了
+    
+    delay(500);
+  } 
 }
 
 
@@ -171,13 +181,18 @@ void loop() {
   //これが真の処理
   //今は読み込み表示のみ
 
+  
+
   while (1) {
+    
     //各チャンネルから　Difarraysize回さんぷりんぐ
     ADRead(ADAvarege);
 
     //平均化計測値表示
     for (i = 0; i < 3; ++i) {
       set_volt(i, set_v[i]);
+      Serial.print("DA in : ");
+      Serial.print(set_v[i], 4); Serial.print(": Current AD");
       Serial.print(analogRead(i) & 0x03ff);
       Serial.print(",");
     }

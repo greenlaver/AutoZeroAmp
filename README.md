@@ -11,3 +11,6 @@ VolttuningN-Ring
 
 SD-project
 SDカードに書き込みする用のコード。3チャンネルの値をAD変換して同時に書き込んでいます。by船橋
+
+AD_Test
+ADコンバータの負電源の応答性をチェック

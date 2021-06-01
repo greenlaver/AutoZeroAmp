@@ -17,7 +17,7 @@ int total = 0;                  // the running total
 int average = 0;                // the average
 int inputPin = A1;  
 
-const int numReadings2 = 16;
+const int numReadings2 = 16;//a
 
 int readings2[numReadings2];      // the readings from the analog input
 int readIndex2 = 0;              // the index of the current reading

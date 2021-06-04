@@ -14,3 +14,6 @@ SDカードに書き込みする用のコード。3チャンネルの値をAD変
 
 AD_Test
 ADコンバータの負電源の応答性をチェック
+
+VoltTunig_20210604_bycontinouslyADvalue
+出力電圧が変動するDA値は高々4つしかないことを利用したチューニング方法．stsubokura

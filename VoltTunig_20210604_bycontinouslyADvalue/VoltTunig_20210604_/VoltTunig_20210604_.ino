@@ -4,7 +4,8 @@
 #define CH 4
 #define MEASURETIMES 16//ひとつのDA値につき何回ADを読み込むか
 #define CHANNELSIZE 3
-#define CANDINATESSIZE 10
+#define CANDINATESSIZE 20
+#define TARGETVOL 400//in 10bit value.1024 = 5V, 0=0V Tuningのゴール．アンプの出力&ArduinoのAD入力範囲が0~4Vなのでその半分くらいが目標．
 
 void MAX5816_write_command(byte cmd, byte dh, byte dl)
 {
@@ -41,8 +42,6 @@ void set_volt(int ch, int v)
   set_dac(ch, v);
 }
 
-
-
 const int numReadings = 16;
 const int Shift = 4;    //上記numReafingsの分、シフトする量。numReafings=2^shift とする。
 int readings[3][numReadings];      // the readings from the analog input
@@ -71,22 +70,22 @@ void ADRead(int *a ) {
 }
 
 //ADを複数回読む操作をwrapする関数
-void ADRead_Multipule(int *a){
+void ADRead_Multipule(int ADAverage[MEASURETIMES]){
   int i;
 
-  for(i = 0; i < MEASURETIMES; times++){
-    ADRead(*a);
+  for(i = 0; i < MEASURETIMES; i++){
+    ADRead(ADAverage);
   }
 
   return (1);
 }
 
-int get_properDAvalue(int *candinates, int *voltvals, int channel){
+int get_properDAvalue(int candinates[CHANNELSIZE][CANDINATESSIZE], int voltvals[CHANNELSIZE][CANDINATESSIZE], int channel){
   //DACに入れる適切な値を返す
   int properindex = 0;
   
   for(int i = 0; i < CANDINATESSIZE; i++){
-    if (candinates[i] < candinates[i - 1]){
+    if (candinates[channel][i] < candinates[channel][i - 1]){
       properindex = i;
     }
   }
@@ -95,15 +94,15 @@ int get_properDAvalue(int *candinates, int *voltvals, int channel){
 }
 
 
-void make_mincandinates(int *candinates, int *voltvals, int volt, int channel){
-  //適切な電圧である可能性がある候補点を取得する
-  int ADAverage[CHANNELSIZE][CANDINATESSIZE]
-  volt = volt - (CANDINATESSIZE >> 2);//変曲点到達後，ある程度戻る
+void make_candinates(int candinates[CHANNELSIZE][CANDINATESSIZE], int voltvals[CHANNELSIZE][CANDINATESSIZE], int volt, int channel){
+  //適切な電圧を出力する可能性がある候補点を取得する
+  int ADAverage[CHANNELSIZE];
+  volt = volt - (CANDINATESSIZE >> 1);//変曲点到達後，ある程度戻る　ここでは候補点の数の半分だけ戻る
   
   for (int i = 0; i < CANDINATESSIZE; i++){
-     set_volt(chanel, volt);
-     ADRead_Multipule(ADAverage, MEASURETIMES);
-     candinates[channel][i] = ADAverage[channel];
+     set_volt(channel, volt);
+     ADRead_Multipule(ADAverage);
+     candinates[channel][i] = abs(ADAverage[channel] - TARGETVOL);
      voltvals[channel][i] = volt;
      
      volt += 1;
@@ -112,17 +111,17 @@ void make_mincandinates(int *candinates, int *voltvals, int volt, int channel){
   return (1);
 }
 
-
+int set_v[CHANNELSIZE] = {};
 void setup() {
   int ChannelEnd[3] = {1, 1, 1};
-  int Targetvol = 500; //in 10bit value Tuningのゴール,1.5V相当で
   int TuneEnd = 1;
-  int init_v = 400;//in 12bit value 4096=5V, 0=0V.
+  int init_v = 600;//in 12bit value 4096=5V, 0=0V.開始直後はアンプからの出力が上限値になるようにする
   
   int ADAverage[CHANNELSIZE] = {}; //読み込み値
-  int candinates[CHANNELSIZE][CANDINATESSIZE] = {};//変曲点通過以後，最適な電圧である可能性のある電圧値を入れる．
-  int voltvals[CHANNELSIZE][CANDINATESSIZE] = {};//変曲点通過以後，最適な電圧を出力しうる時にDAに入力する値の候補値を入れる
-  int set_v[CHANNELSIZE] = {};
+  int candinates[CHANNELSIZE][CANDINATESSIZE] = { {}, {}, {} };//変曲点通過以後，最適な電圧である可能性のある電圧値を入れる．
+  int voltvals[CHANNELSIZE][CANDINATESSIZE] = { {}, {}, {} };//変曲点通過以後，最適な電圧を出力しうる時にDAに入力する値の候補値を入れる
+  int properDAvalue[CHANNELSIZE] = { {}, {}, {} }; //最適な電圧を出力しうる時にDAに入力する値
+  
   
   Serial.begin(57600);
   Wire.begin();
@@ -138,86 +137,84 @@ void setup() {
   
   pinMode(ledPin, OUTPUT);
   
-  while (!Serial) {
-    ; // wait for serial port to connect. Needed for native USB port only
-  }
+//  while (!Serial) {
+//    ; // wait for serial port to connect. Needed for native USB port only
+//  }
 
   //チューニング処理開始
   while (TuneEnd) {
+    //各チャンネルから読み込み．チューニング中はLEDをオン
     digitalWrite(ledPin, HIGH);
-    
-    //各チャンネルから読み込み
-    ADRead_Multipule(ADAverage, MEASURETIMES);
+    ADRead_Multipule(ADAverage);
 
     //Tuning処理
     for (int channel = 0; channel < CHANNELSIZE; ++channel) {
-      
+     
       if (ChannelEnd[channel] != 0) {
         
-        //未処理チャンネルのみチューニングを続ける
-        Serial.print("Ch ");
+//        未処理チャンネルのみチューニングを続ける
+        Serial.print("Ch");
         Serial.print(channel);
-        Serial.print("");
-        Serial.print(",");
+        Serial.print(":");
+        Serial.print(ADAverage[channel]);
+        Serial.print(" ");
         
-        if (ADRead_Multipule(ADAverage, MEASURETIMES) > Targetvol){
+        if (ADAverage[channel] > TARGETVOL){
           set_v[channel] = set_v[channel] += 5;
           set_volt(channel, set_v[channel]);
        }
 
-        if(ADRead_Multipule(ADAverage, MEASURETIMES) < Targetvol){
+        if(ADAverage[channel] < TARGETVOL){
           make_candinates(candinates, voltvals, set_v[channel], channel);
           properDAvalue[channel] = get_properDAvalue(candinates, voltvals, channel);
           set_v[channel] = properDAvalue[channel];
           set_volt(channel, set_v[channel]);
-          
-          ChannelEnd[channel] = 1;
+          ChannelEnd[channel] = 0;
        }
       }
     }
 
     //　全チャンネルの終了チェック
     if (ChannelEnd[0] | ChannelEnd[1] | ChannelEnd[2]) {
-      Serial.println("Tuning");    //未調整中
+//      Serial.println("Tuning");    //未調整中
     } else {
-      Serial.println("Tuning End:");   //調整終了結果の表示
-      
-      for (int l = 0; l < CHANNELSIZE; ++l) {
-        Serial.print("Ch "); Serial.print(l); Serial.print(": DA-Set ");
-        Serial.print(set_v[l], 5); Serial.print(": Current AD");
-        Serial.println(ADAverage[l]);
-      }
-      
+//      Serial.println("Tuning End:");   //調整終了結果の表示
+//      
+//      for (int l = 0; l < CHANNELSIZE; ++l) {
+//        Serial.print("Ch "); Serial.print(l); Serial.print(": DA-Set ");
+//        Serial.print(set_v[l]); Serial.print(": Current AD");
+//        Serial.println(ADAverage[l]);
+//      }
+//      
       TuneEnd = 0;
       digitalWrite(ledPin, LOW); 
       break;//Tuning 終了
     }
     
-    delay(5);
+    delay(1);
   } 
 }
 
 void loop() {
   int i, j;
+
   int ADAverage[CHANNELSIZE]; //読み込み値
 
   //これが真の処理
   //今は読み込み表示のみ
 
-  while (1) {
+  while (cnt < 100) {
+    
     //各チャンネルから　Difarraysize回さんぷりんぐ
-    ADRead_Multipule(ADAverage, MEASURETIMES);
-      
+    ADRead(ADAverage);
+    
+//    Serial.print("Current AD ");
       //平均化計測値表示
     for (i = 0; i < 3; ++i) {
       set_volt(i, set_v[i]);
-      Serial.print(": Current AD");
-      Serial.print(analogRead(i) & 0x03ff);
       Serial.print(ADAverage[i]);
-      Serial.print(",");
+      Serial.print(" ,");
       }
-    
-    Serial.println();
-    delay(5);
+ 
   }
 }

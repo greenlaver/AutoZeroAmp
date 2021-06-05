@@ -15,5 +15,5 @@ SDカードに書き込みする用のコード。3チャンネルの値をAD変
 AD_Test
 ADコンバータの負電源の応答性をチェック
 
-VoltTunig_20210604_bycontinouslyADvalue
-出力電圧が変動するDA値は高々4つしかないことを利用したチューニング方法．stsubokura
+VoltTuning_bycDACcharacteristic
+秋田アンプの「出力が4Vから0Vに変化するまでに，DACに入れる値は4つ分しか変化しない」ということを利用したチューニング方法 sTsubokura

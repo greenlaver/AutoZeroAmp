@@ -6,13 +6,8 @@
  * 作成者  ：Sota Tsubokura
  *
  * 変更履歴：2021 06/04 : ver1.0 
-<<<<<<< HEAD
- *          2021 06/07 : ver1.01 bugfix シリアルプロッタ向けにprintの仕方を変更 軸が死んでる時にする処理を追加
- *        
-=======
  *          2021 06/07 : ver1.01 bugfix シリアルプロッタ向けにprintの仕方を変更 軸が死んでる時にする処理を追加
  *          
->>>>>>> develop
  *        
  *
  */
@@ -247,8 +242,6 @@ void loop() {
 
   //これが真の処理
   //今は読み込み表示のみ
-<<<<<<< HEAD
-
   
     while(1){
     //各チャンネルからサンプリング
@@ -262,21 +255,6 @@ void loop() {
         }
         
         Serial.println(" ");
-=======
-  
-    while(1){
-    //各チャンネルからサンプリング
-      Read_AD(ADAverage);
-  
-        //平均化計測値表示　ArduinoIDEのシリアルプロッタを使えば変化がわかりやすい
-      for (int i = 0; i < 3; ++i) {
-        set_volt(i, set_v[i]);
-        Serial.print(ADAverage[i]);
-        Serial.print(" ,");
-        }
-        
-        Serial.println(" ");
->>>>>>> develop
     }
   
 }

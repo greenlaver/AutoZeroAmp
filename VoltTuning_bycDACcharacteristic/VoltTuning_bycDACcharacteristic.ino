@@ -143,6 +143,8 @@ void setup() {
   int ChannelEnd[3] = {1, 1, 1};
   int TuneEnd = 1;
   int init_v = 600;//in 12bit value 4096=5V, 0=0V.開始直後はアンプからの出力が上限値になるようにする
+  int cnt = 0;
+  int ThreshholdTime = 1000;//軸が死んでいるのかを判別するのに使う閾値．起動後ある程度はアンプからの出力が0になるっぽいので用いている．
   
   int ADAverage[CHANNELSIZE] = {}; //読み込み値
   int candinates[CHANNELSIZE][CANDINATESSIZE] = { {}, {}, {} };//変曲点通過以後，最適な電圧である可能性のある電圧値を入れる．
@@ -163,22 +165,26 @@ void setup() {
   
   pinMode(ledPin, OUTPUT);
 
+  digitalWrite(ledPin, HIGH);
   //チューニング処理開始
   while (TuneEnd) {
+    cnt++;
     //各チャンネルから読み込み．チューニング中はLEDをオン
-    digitalWrite(ledPin, HIGH);
+    
     Read_ADMultipule(ADAverage);
 
     //Tuning処理
     for (int channel = 0; channel < CHANNELSIZE; ++channel) {
       
+      
       //カンチレバーのどれかの軸が死んでいたら( = 初期値が0ならば)Lチカさせて知らせる
-      if(ADAverage[channel] == 0){
+      if(cnt > ThreshholdTime && ADAverage[channel] == 0){
           while(1){
             digitalWrite(ledPin, LOW); 
             delay(100);
             digitalWrite(ledPin, HIGH);
             delay(100);
+          }
        }
        
       if (ChannelEnd[channel] != 0) {
@@ -197,7 +203,7 @@ void setup() {
           set_volt(channel, set_v[channel]);
        }
 
-        if(ADAverage[channel] < TARGETVOL){
+        if(0 < ADAverage[channel] && ADAverage[channel] < TARGETVOL){
           make_candinates(candinates, voltvals, set_v[channel], channel);
           properDAvalue[channel] = get_properDAvalue(candinates, voltvals, channel);
           set_v[channel] = properDAvalue[channel];
@@ -207,7 +213,7 @@ void setup() {
 
        }
        
-      }
+      
     }
 
     //　全チャンネルの終了チェック

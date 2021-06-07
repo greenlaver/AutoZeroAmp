@@ -6,6 +6,7 @@
  * 作成者  ：Sota Tsubokura
  *
  * 変更履歴：2021 06/04 : ver1.0 
+ *          2021 06/07 : ver1.01 bugfix シリアルプロッタ向けにprintの仕方を変更
  *        
  *        
  *
@@ -207,18 +208,20 @@ void loop() {
   //これが真の処理
   //今は読み込み表示のみ
 
-  while (cnt < 100) {
-    
+  
+    while(1){
     //各チャンネルからサンプリング
     ADRead(ADAverage);
     
 //    Serial.print("Current AD ");
-      //平均化計測値表示
+      //平均化計測値表示　ArduinoIDEのシリアルプロッタを使えば変化がわかりやすい
     for (i = 0; i < 3; ++i) {
       set_volt(i, set_v[i]);
       Serial.print(ADAverage[i]);
       Serial.print(" ,");
       }
- 
-  }
+      Serial.println(" ");
+
+    }
+  
 }

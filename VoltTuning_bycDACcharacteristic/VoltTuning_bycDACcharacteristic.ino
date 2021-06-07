@@ -6,8 +6,13 @@
  * 作成者  ：Sota Tsubokura
  *
  * 変更履歴：2021 06/04 : ver1.0 
- *          2021 06/07 : ver1.01 bugfix シリアルプロッタ向けにprintの仕方を変更
+<<<<<<< HEAD
+ *          2021 06/07 : ver1.01 bugfix シリアルプロッタ向けにprintの仕方を変更 軸が死んでる時にする処理を追加
  *        
+=======
+ *          2021 06/07 : ver1.01 bugfix シリアルプロッタ向けにprintの仕方を変更 軸が死んでる時にする処理を追加
+ *          
+>>>>>>> develop
  *        
  *
  */
@@ -56,7 +61,7 @@ int readIndex = 0;                 // the index of the current reading
 int total[3] = {0, 0, 0};          // the running total
 int ledPin = 13;      
 
-void ADRead(int *a ) {
+void Read_AD(int *a ) {
   int i, j;
 
   for (i = 0; i < 3; i++) {
@@ -78,11 +83,11 @@ void ADRead(int *a ) {
 }
 
 //ADを複数回読む操作をwrapする関数
-void ADRead_Multipule(int ADAverage[MEASURETIMES]){
+void Read_ADMultipule(int ADAverage[MEASURETIMES]){
   int i;
 
   for(i = 0; i < MEASURETIMES; i++){
-    ADRead(ADAverage);
+    Read_AD(ADAverage);
   }
 
   return (1);
@@ -108,7 +113,7 @@ void make_candinates(int candinates[CHANNELSIZE][CANDINATESSIZE], int voltvals[C
   
   for (int i = 0; i < CANDINATESSIZE; i++){
      set_volt(channel, volt);
-     ADRead_Multipule(ADAverage);
+     Read_ADMultipule(ADAverage);
      candinates[channel][i] = abs(ADAverage[channel] - TARGETVOL);
      voltvals[channel][i] = volt;
      
@@ -118,11 +123,33 @@ void make_candinates(int candinates[CHANNELSIZE][CANDINATESSIZE], int voltvals[C
   return (1);
 }
 
+
+//カンチレバーのどれかの軸が目標値からある程度外れたらLEDで知らせる関数 開発中
+void Check_ADValueinMeasuring(int ADAverage[CHANNELSIZE]){
+  int Threshhord = 300;
+
+  for (int i = 0; i < CHANNELSIZE; i++){
+    if (abs(ADAverage[i] - TARGETVOL) > Threshhord){
+      while(1){
+        digitalWrite(ledPin, LOW); 
+        delay(100);
+        digitalWrite(ledPin, HIGH);
+      }
+    }
+  }
+  
+  return (1);
+}
+
+
+
 int set_v[CHANNELSIZE] = {};
 void setup() {
   int ChannelEnd[3] = {1, 1, 1};
   int TuneEnd = 1;
   int init_v = 600;//in 12bit value 4096=5V, 0=0V.開始直後はアンプからの出力が上限値になるようにする
+  int cnt = 0;
+  int ThreshholdTime = 1000;//軸が死んでいるのかを判別するのに使う閾値．起動後ある程度はアンプからの出力が0になるっぽいので用いている．
   
   int ADAverage[CHANNELSIZE] = {}; //読み込み値
   int candinates[CHANNELSIZE][CANDINATESSIZE] = { {}, {}, {} };//変曲点通過以後，最適な電圧である可能性のある電圧値を入れる．
@@ -142,18 +169,29 @@ void setup() {
   }
   
   pinMode(ledPin, OUTPUT);
-//  while (!Serial) {
-//    ; // wait for serial port to connect. Needed for native USB port only
-//  }
 
+  digitalWrite(ledPin, HIGH);
   //チューニング処理開始
   while (TuneEnd) {
+    cnt++;
     //各チャンネルから読み込み．チューニング中はLEDをオン
-    digitalWrite(ledPin, HIGH);
-    ADRead_Multipule(ADAverage);
+    
+    Read_ADMultipule(ADAverage);
 
     //Tuning処理
     for (int channel = 0; channel < CHANNELSIZE; ++channel) {
+      
+      
+      //カンチレバーのどれかの軸が死んでいたら( = 初期値が0ならば)Lチカさせて知らせる
+      if(cnt > ThreshholdTime && ADAverage[channel] == 0){
+          while(1){
+            digitalWrite(ledPin, LOW); 
+            delay(100);
+            digitalWrite(ledPin, HIGH);
+            delay(100);
+          }
+       }
+       
       if (ChannelEnd[channel] != 0) {
         
 //        未処理チャンネルのみチューニングを続ける
@@ -162,21 +200,25 @@ void setup() {
         Serial.print(":");
         Serial.print(ADAverage[channel]);
         Serial.print(" ");
+
+        Serial.println(set_v[channel]);
         
         if (ADAverage[channel] > TARGETVOL){
           set_v[channel] = set_v[channel] += 5;
           set_volt(channel, set_v[channel]);
        }
 
-        if(ADAverage[channel] < TARGETVOL){
+        if(0 < ADAverage[channel] && ADAverage[channel] < TARGETVOL){
           make_candinates(candinates, voltvals, set_v[channel], channel);
           properDAvalue[channel] = get_properDAvalue(candinates, voltvals, channel);
           set_v[channel] = properDAvalue[channel];
           set_volt(channel, set_v[channel]);
           ChannelEnd[channel] = 0;
        }
+
+       }
        
-      }
+      
     }
 
     //　全チャンネルの終了チェック
@@ -184,13 +226,13 @@ void setup() {
 //      Serial.println("Tuning");    //未調整中
     } else {
 //      Serial.println("Tuning End:");   //調整終了結果の表示
-//      
-//      for (int l = 0; l < CHANNELSIZE; ++l) {
+      
+      for (int l = 0; l < CHANNELSIZE; ++l) {
 //        Serial.print("Ch "); Serial.print(l); Serial.print(": DA-Set ");
 //        Serial.print(set_v[l]); Serial.print(": Current AD");
 //        Serial.println(ADAverage[l]);
-//      }
-//      
+      }
+      
       TuneEnd = 0;
       digitalWrite(ledPin, LOW); 
       break;//Tuning 終了
@@ -201,27 +243,40 @@ void setup() {
 }
 
 void loop() {
-  int i, j;
-
   int ADAverage[CHANNELSIZE]; //読み込み値
 
   //これが真の処理
   //今は読み込み表示のみ
+<<<<<<< HEAD
 
   
     while(1){
     //各チャンネルからサンプリング
-    ADRead(ADAverage);
-    
-//    Serial.print("Current AD ");
-      //平均化計測値表示　ArduinoIDEのシリアルプロッタを使えば変化がわかりやすい
-    for (i = 0; i < 3; ++i) {
-      set_volt(i, set_v[i]);
-      Serial.print(ADAverage[i]);
-      Serial.print(" ,");
-      }
-      Serial.println(" ");
-
+      Read_AD(ADAverage);
+  
+        //平均化計測値表示　ArduinoIDEのシリアルプロッタを使えば変化がわかりやすい
+      for (int i = 0; i < 3; ++i) {
+        set_volt(i, set_v[i]);
+        Serial.print(ADAverage[i]);
+        Serial.print(" ,");
+        }
+        
+        Serial.println(" ");
+=======
+  
+    while(1){
+    //各チャンネルからサンプリング
+      Read_AD(ADAverage);
+  
+        //平均化計測値表示　ArduinoIDEのシリアルプロッタを使えば変化がわかりやすい
+      for (int i = 0; i < 3; ++i) {
+        set_volt(i, set_v[i]);
+        Serial.print(ADAverage[i]);
+        Serial.print(" ,");
+        }
+        
+        Serial.println(" ");
+>>>>>>> develop
     }
   
 }

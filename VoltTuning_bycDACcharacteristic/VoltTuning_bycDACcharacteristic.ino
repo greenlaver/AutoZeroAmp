@@ -6,6 +6,7 @@
  * 作成者  ：Sota Tsubokura
  *
  * 変更履歴：2021 06/04 : ver1.0 
+ *          2021 06/07 : ver1.01 bugfix シリアルプロッタ向けにprintの仕方を変更
  *        
  *        
  *
@@ -55,7 +56,7 @@ int readIndex = 0;                 // the index of the current reading
 int total[3] = {0, 0, 0};          // the running total
 int ledPin = 13;      
 
-void ADRead(int *a ) {
+void Read_AD(int *a ) {
   int i, j;
 
   for (i = 0; i < 3; i++) {
@@ -77,11 +78,11 @@ void ADRead(int *a ) {
 }
 
 //ADを複数回読む操作をwrapする関数
-void ADRead_Multipule(int ADAverage[MEASURETIMES]){
+void Read_ADMultipule(int ADAverage[MEASURETIMES]){
   int i;
 
   for(i = 0; i < MEASURETIMES; i++){
-    ADRead(ADAverage);
+    Read_AD(ADAverage);
   }
 
   return (1);
@@ -107,7 +108,7 @@ void make_candinates(int candinates[CHANNELSIZE][CANDINATESSIZE], int voltvals[C
   
   for (int i = 0; i < CANDINATESSIZE; i++){
      set_volt(channel, volt);
-     ADRead_Multipule(ADAverage);
+     Read_ADMultipule(ADAverage);
      candinates[channel][i] = abs(ADAverage[channel] - TARGETVOL);
      voltvals[channel][i] = volt;
      
@@ -116,6 +117,26 @@ void make_candinates(int candinates[CHANNELSIZE][CANDINATESSIZE], int voltvals[C
 
   return (1);
 }
+
+
+//カンチレバーのどれかの軸が目標値からある程度外れたらLEDで知らせる関数 開発中
+void Check_ADValueinMeasuring(int ADAverage[CHANNELSIZE]){
+  int Threshhord = 300;
+
+  for (int i = 0; i < CHANNELSIZE; i++){
+    if (abs(ADAverage[i] - TARGETVOL) > Threshhord){
+      while(1){
+        digitalWrite(ledPin, LOW); 
+        delay(100);
+        digitalWrite(ledPin, HIGH);
+      }
+    }
+  }
+  
+  return (1);
+}
+
+
 
 int set_v[CHANNELSIZE] = {};
 void setup() {
@@ -141,18 +162,25 @@ void setup() {
   }
   
   pinMode(ledPin, OUTPUT);
-//  while (!Serial) {
-//    ; // wait for serial port to connect. Needed for native USB port only
-//  }
 
   //チューニング処理開始
   while (TuneEnd) {
     //各チャンネルから読み込み．チューニング中はLEDをオン
     digitalWrite(ledPin, HIGH);
-    ADRead_Multipule(ADAverage);
+    Read_ADMultipule(ADAverage);
 
     //Tuning処理
     for (int channel = 0; channel < CHANNELSIZE; ++channel) {
+      
+      //カンチレバーのどれかの軸が死んでいたら( = 初期値が0ならば)Lチカさせて知らせる
+      if(ADAverage[channel] == 0){
+          while(1){
+            digitalWrite(ledPin, LOW); 
+            delay(100);
+            digitalWrite(ledPin, HIGH);
+            delay(100);
+       }
+       
       if (ChannelEnd[channel] != 0) {
         
 //        未処理チャンネルのみチューニングを続ける
@@ -161,6 +189,8 @@ void setup() {
         Serial.print(":");
         Serial.print(ADAverage[channel]);
         Serial.print(" ");
+
+        Serial.println(set_v[channel]);
         
         if (ADAverage[channel] > TARGETVOL){
           set_v[channel] = set_v[channel] += 5;
@@ -174,6 +204,8 @@ void setup() {
           set_volt(channel, set_v[channel]);
           ChannelEnd[channel] = 0;
        }
+
+       }
        
       }
     }
@@ -183,13 +215,13 @@ void setup() {
 //      Serial.println("Tuning");    //未調整中
     } else {
 //      Serial.println("Tuning End:");   //調整終了結果の表示
-//      
-//      for (int l = 0; l < CHANNELSIZE; ++l) {
+      
+      for (int l = 0; l < CHANNELSIZE; ++l) {
 //        Serial.print("Ch "); Serial.print(l); Serial.print(": DA-Set ");
 //        Serial.print(set_v[l]); Serial.print(": Current AD");
 //        Serial.println(ADAverage[l]);
-//      }
-//      
+      }
+      
       TuneEnd = 0;
       digitalWrite(ledPin, LOW); 
       break;//Tuning 終了
@@ -200,25 +232,23 @@ void setup() {
 }
 
 void loop() {
-  int i, j;
-
   int ADAverage[CHANNELSIZE]; //読み込み値
 
   //これが真の処理
   //今は読み込み表示のみ
-
-  while (cnt < 100) {
-    
+  
+    while(1){
     //各チャンネルからサンプリング
-    ADRead(ADAverage);
-    
-//    Serial.print("Current AD ");
-      //平均化計測値表示
-    for (i = 0; i < 3; ++i) {
-      set_volt(i, set_v[i]);
-      Serial.print(ADAverage[i]);
-      Serial.print(" ,");
-      }
- 
-  }
+      Read_AD(ADAverage);
+  
+        //平均化計測値表示　ArduinoIDEのシリアルプロッタを使えば変化がわかりやすい
+      for (int i = 0; i < 3; ++i) {
+        set_volt(i, set_v[i]);
+        Serial.print(ADAverage[i]);
+        Serial.print(" ,");
+        }
+        
+        Serial.println(" ");
+    }
+  
 }

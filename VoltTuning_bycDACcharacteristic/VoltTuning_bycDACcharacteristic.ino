@@ -7,7 +7,7 @@
  *
  * 変更履歴：2021 06/04 : ver1.0 
  *          2021 06/07 : ver1.01 bugfix シリアルプロッタ向けにprintの仕方を変更 軸が死んでる時にする処理を追加
- *          
+ *          2021 06/07 : ver1.02 軸が死んでる時にする処理の条件判定がミスってたので修正
  *        
  *
  */
@@ -144,7 +144,7 @@ void setup() {
   int TuneEnd = 1;
   int init_v = 600;//in 12bit value 4096=5V, 0=0V.開始直後はアンプからの出力が上限値になるようにする
   int cnt = 0;
-  int ThreshholdTime = 1000;//軸が死んでいるのかを判別するのに使う閾値．起動後ある程度はアンプからの出力が0になるっぽいので用いている．
+  int ThreshholdTime = 100;//軸が死んでいるのかを判別するのに使う閾値．起動後ある程度はアンプからの出力が0になるっぽいので用いている．
   
   int ADAverage[CHANNELSIZE] = {}; //読み込み値
   int candinates[CHANNELSIZE][CANDINATESSIZE] = { {}, {}, {} };//変曲点通過以後，最適な電圧である可能性のある電圧値を入れる．
@@ -178,7 +178,7 @@ void setup() {
       
       
       //カンチレバーのどれかの軸が死んでいたら( = 初期値が0ならば)Lチカさせて知らせる
-      if(cnt > ThreshholdTime && ADAverage[channel] == 0){
+      if(ThreshholdTime < cnt && cnt <  ThreshholdTime + 100 && ADAverage[channel] == 0){
           while(1){
             digitalWrite(ledPin, LOW); 
             delay(100);
@@ -190,20 +190,20 @@ void setup() {
       if (ChannelEnd[channel] != 0) {
         
 //        未処理チャンネルのみチューニングを続ける
-        Serial.print("Ch");
-        Serial.print(channel);
-        Serial.print(":");
-        Serial.print(ADAverage[channel]);
-        Serial.print(" ");
-
-        Serial.println(set_v[channel]);
+//        Serial.print("Ch");
+//        Serial.print(channel);
+//        Serial.print(":");
+//        Serial.print(ADAverage[channel]);
+//        Serial.print(" ");
+//
+//        Serial.println(set_v[channel]);
         
         if (ADAverage[channel] > TARGETVOL){
           set_v[channel] = set_v[channel] += 5;
           set_volt(channel, set_v[channel]);
        }
 
-        if(0 < ADAverage[channel] && ADAverage[channel] < TARGETVOL){
+        if(ADAverage[channel] < TARGETVOL){
           make_candinates(candinates, voltvals, set_v[channel], channel);
           properDAvalue[channel] = get_properDAvalue(candinates, voltvals, channel);
           set_v[channel] = properDAvalue[channel];

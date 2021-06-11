@@ -4,29 +4,29 @@
 
 const int chipSelect = 4;
 
-const int numReadings = 16;  //　配列の数
+const int numReadings = 32;  //　配列の数
 
 int readings[numReadings];      // the readings from the analog input
 int readIndex = 0;              // the index of the current reading
 int total = 0;                  // the running total
 int average = 0;                // the average
-int inputPin = A1;  
+int inputPin = A0;  
 
-const int numReadings2 = 16;
+const int numReadings2 = 32;
 
 int readings2[numReadings2];      // the readings from the analog input
 int readIndex2 = 0;              // the index of the current reading
 int total2 = 0;                  // the running total
 int average2 = 0;                // the average
-int inputPin2 = A2;
+int inputPin2 = A1;
 
-const int numReadings3 = 16;
+const int numReadings3 = 32;
 
 int readings3[numReadings3];      // the readings from the analog input
 int readIndex3 = 0;              // the index of the current reading
 int total3 = 0;                  // the running total
 int average3 = 0;                // the average
-int inputPin3 = A3;
+int inputPin3 = A2;
 
 int count = 0;
 int before =0;
@@ -42,7 +42,7 @@ void flash()
     readIndex = 0;                              // ...wrap around to the beginning:
   }
 
-  average = total >>4; //ビットシフトで割り算をする
+  average = total >>5; //ビットシフトで割り算をする
 
 
   total2 = total2 - readings2[readIndex2];          // subtract the last reading:
@@ -54,7 +54,7 @@ void flash()
     readIndex2 = 0;                              // ...wrap around to the beginning:
   }
 
-  average2 = total2 >>4; //ビットシフトで割り算をする
+  average2 = total2 >>5; //ビットシフトで割り算をする
 
   
   total3 = total3 - readings3[readIndex3];          // subtract the last reading:
@@ -66,7 +66,7 @@ void flash()
     readIndex3 = 0;                              // ...wrap around to the beginning:
   }
 
-  average3 = total3 >>4; //ビットシフトで割り算をする
+  average3 = total3 >>5; //ビットシフトで割り算をする
 
   count = ++count;
 }
@@ -104,23 +104,23 @@ void loop()
     File dataFile = SD.open("datalog.txt", FILE_WRITE);
 
     if (dataFile) {
-      dataFile.print("A1ピンの値：");
+      dataFile.print("A0ピンの値：");
       dataFile.print(average);
       dataFile.print(",");
-      dataFile.print("A2ピンの値：");
+      dataFile.print("A1ピンの値：");
       dataFile.print(average2);
       dataFile.print(",");
-      dataFile.print("A3ピンの値：");
+      dataFile.print("A2ピンの値：");
       dataFile.println(average3);
       dataFile.close();
       // シリアルポートにも出力
-      Serial.print("A1ピンの値：");
+      Serial.print("A0ピンの値：");
       Serial.print(average);
       Serial.print(",");
-      Serial.print("A2ピンの値：");
+      Serial.print("A1ピンの値：");
       Serial.print(average2);
       Serial.print(",");
-      Serial.print("A3ピンの値：");
+      Serial.print("A2ピンの値：");
       Serial.println(average3);
     }
     // ファイルが開けなかったらエラーを出力

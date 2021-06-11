@@ -141,9 +141,6 @@ void setup() {
   }
   
   pinMode(ledPin, OUTPUT);
-//  while (!Serial) {
-//    ; // wait for serial port to connect. Needed for native USB port only
-//  }
 
   //チューニング処理開始
   while (TuneEnd) {

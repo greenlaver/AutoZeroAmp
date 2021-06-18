@@ -1,5 +1,5 @@
 /*
-   タイトル：MEMS触覚センサ用アンプ(秋田アンプ)の自動チューニングコード
+   タイトル：MEMS触覚センサ用アンプ(秋田アンプ)の自動チューニングコード　ArduinoIDEシリアルプロッタ用
    説明    :MEMS触覚センサの電圧とDAC(MAX5816)の電圧の差を増幅させるアンプ(秋田アンプ)を自動調整する．調整には秋田アンプの「出力が4Vから0Vに変化するまでに，DACに入れる値は4つ分しか変化しない」
    ことを利用する．
 
@@ -8,6 +8,7 @@
    変更履歴：2021 06/04 : ver1.0
             2021 06/07 : ver1.01 bugfix シリアルプロッタ向けにprintの仕方を変更 軸が死んでる時にする処理を追加
             2021 06/07 : ver1.02 軸が死んでる時にする処理の条件判定がミスってたので修正
+            2021 06/18 : ver1.1 軸が死んでる時にする処理を改良．軸が死んでいても3軸の値が出力されるように．また軸の状態によってLチカさせるパターンを変える
 
 
 */
@@ -118,27 +119,28 @@ void make_candinates(int candinates[CHANNELSIZE][CANDINATESSIZE], int voltvals[C
   return (1);
 }
 
-int ChannelBroken[CHANNELSIZE] = {0, 0, 0};
-//カンチレバーのどれかの軸が目標値からある程度外れたらLEDで知らせる関数 開発中
-void Check_ADValueinMeasuring(int ADAverage[CHANNELSIZE],int FallCheck[CHANNELSIZE]) {
-  int Threshhord = 350;
-  int cnt = 0;
 
-  for (int i = 0; i < CHANNELSIZE; i++) {
-    if (abs(ADAverage[i] - TARGETVOL) > Threshhord) {
-      FallCheck[i] += 1;
-    }
-
-    if(FallCheck[i] > 10){
-      ChannelBroken[i] = 1;
-    }
-  }
-
-  return (1);
-}
+////カンチレバーのどれかの軸が目標値からある程度外れたらLEDで知らせる関数 開発中
+//void Check_ADValueinMeasuring(int ADAverage[CHANNELSIZE],int FallCheck[CHANNELSIZE]) {
+//  int Threshhord = 390;
+//  int cnt = 0;
+//
+//  for (int i = 0; i < CHANNELSIZE; i++) {
+//    if (abs(ADAverage[i] - TARGETVOL) > Threshhord) {
+//      FallCheck[i] += 1;
+//    }
+//
+//    if(FallCheck[i] > 10){
+//      ChannelBroken[i] = 1;
+//    }
+//  }
+//
+//  return (1);
+//}
 
 
 int set_v[CHANNELSIZE] = {0, 0, 0};
+int ChannelBroken[CHANNELSIZE] = {0, 0, 0};
 void setup() {
   int ChannelEnd[CHANNELSIZE] = {1, 1, 1};
   int FallCheck[CHANNELSIZE] = {0, 0, 0};
@@ -180,35 +182,51 @@ void setup() {
 
       //カンチレバーのどれかの軸が死んでいたら( = 初期値が0ならば)Lチカさせて知らせる
       if (ThreshholdTime < cnt && cnt <  ThreshholdTime + 100 && ADAverage[channel] < 5) {
+        
 
-        //10回ADから0が返ってきたら死んでる扱いしてチューニング処理をやめさせる．
-        for (int i = 0; i < CHANNELSIZE; i++){
+          //10回ADから0が返ってきたら死んでる扱いしてチューニング処理をやめさせる．
           digitalWrite(ledPin, LOW);
-          delay(1);
+          delay(10);
           digitalWrite(ledPin, HIGH);
-          delay(1);
-          FallCheck[i] += 1;
+          delay(10);
+          FallCheck[channel] += 1;
           
-          if (FallCheck[i] > 10){
-            ChannelEnd[i] = 1;
-            ChannelBroken[i]  = 1;
-          }
+          if (FallCheck[channel] > 80){
+            
+            ChannelEnd[channel] = 0;
+            ChannelBroken[channel]  = 1;
+          
         }
       }
       
 
       if (ChannelEnd[channel] != 0) {
+
+        //        未処理チャンネルのみチューニングを続ける
+//        Serial.print("Ch");
+//        Serial.print(channel);
+//        Serial.print(":");
+//        Serial.print(ADAverage[channel]);
+//        Serial.print(" ");
+//
+//        Serial.println(set_v[channel]);
+
         if (ADAverage[channel] > TARGETVOL) {
           set_v[channel] = set_v[channel] += 5;
           set_volt(channel, set_v[channel]);
         }
 
         if (ADAverage[channel] < TARGETVOL) {
+//          Serial.println("channel");
+//          Serial.println(channel);
+//          Serial.println(ChannelEnd[channel]);
+
           make_candinates(candinates, voltvals, set_v[channel], channel);
           properDAvalue[channel] = get_properDAvalue(candinates, voltvals, channel);
           set_v[channel] = properDAvalue[channel];
           set_volt(channel, set_v[channel]);
           ChannelEnd[channel] = 0;
+
         }
 
       }
@@ -237,9 +255,12 @@ void setup() {
 }
 
 void loop() {
-  int ADAverage[CHANNELSIZE]; //読み込み値
-  int FallCheck[CHANNELSIZE];
+  int ADAverage[CHANNELSIZE] = {}; //読み込み値
+  int FallCheck[CHANNELSIZE] = {};
+  
   int stat_cnt = 0;
+  int Threshhord = 390;
+  int fallcheck_cnt = 0;
   
   //これが真の処理
   //今は読み込み表示のみ
@@ -257,39 +278,54 @@ void loop() {
 
    Serial.println(" ");
 
-  Check_ADValueinMeasuring(ADAverage[CHANNELSIZE], FallCheck[CHANNELSIZE]);
-
     //死んでるチャンネルがあるかどうかでLEDの点滅パターンを決める
   if (ChannelBroken[0] | ChannelBroken[1] | ChannelBroken[2]) {
-    
-    if (stat_cnt < 1000) {
+  
+    if (stat_cnt == 0){
       digitalWrite(ledPin, HIGH);
-      ++stat_cnt;
     }
-    if (stat_cnt > 1000) {
+    
+    if (stat_cnt  == 20){
       digitalWrite(ledPin, LOW);
-      ++stat_cnt;
     }
-    if (stat_cnt > 2000){
+
+    ++stat_cnt;
+
+    if (stat_cnt  >= 40){
       stat_cnt = 0;
     }
+    
   }else{
     
-    if (stat_cnt < 2000) {
+    if (stat_cnt == 0){
       digitalWrite(ledPin, HIGH);
-      ++stat_cnt;
-    }
-    if (stat_cnt > 4000) {
-      digitalWrite(ledPin, LOW);
-      ++stat_cnt;
     }
     
-    if (stat_cnt > 4000){
+    if (stat_cnt  == 200){
+      digitalWrite(ledPin, LOW);
+    }
+
+    ++stat_cnt;
+
+    if (stat_cnt  >= 400){
       stat_cnt = 0;
     }
-    
   }
+
+  if(stat_cnt > 50){
+
+    for (int i = 0; i < CHANNELSIZE; i++) {
+      if (abs(ADAverage[i] - TARGETVOL) > Threshhord) {
+        FallCheck[i] += 1;
+      }
   
- }
+      if(FallCheck[i] > 50){
+        ChannelBroken[i] = 1;
+      
+    }
+   }
+  
+  }
     
+ }
 }

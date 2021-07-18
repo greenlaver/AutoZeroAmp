@@ -10,6 +10,7 @@
 #if defined(USE_MAX5696)
 #define I2C_ADDR 0x0f
 #elif defined(USE_AD5696)
+#define I2C_ADDR 0x0c // A1=A0=0
 #endif
 
 #define LED0 2

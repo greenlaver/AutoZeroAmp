@@ -11,8 +11,8 @@
 //#define USE_MAX5816
 #define USE_AD5696
 
-// #define LED_OFF // LED点滅無効化
-#define DEBUG   // Enable DEBUG print
+#define LED_OFF // LED点滅無効化
+// #define DEBUG   // Enable DEBUG print
 
 #if defined(USE_MAX5696)
 #define I2C_ADDR 0x0f
@@ -172,7 +172,7 @@ unsigned int searchZeroPoint(int ch)
     delay(1);
 
 // デバッグ用シリアル表示
-//   例: [ch], [アナログ入力], []
+//   例: [ch], [アナログ入力], [DACの設定値], [DAC設定値のVoltage換算]
 #ifdef DEBUG
     Serial.print(ch);
     Serial.print("\t");

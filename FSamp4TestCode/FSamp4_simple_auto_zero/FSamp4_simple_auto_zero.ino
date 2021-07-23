@@ -3,15 +3,15 @@
 // Haruo Noma
 
 // 2021/07/13に船橋がコメント追加
-// 2021/07/15 シンプルゼロ校正プログラム追加
+// 2021/07/15 シンプルゼロ校正プログラム追加 written by aonrjp
 
 #include <Wire.h>
 
 //#define USE_MAX5816
 #define USE_AD5696
 
-#define LED_OFF // LED点滅無効化
-// #define DEBUG   // Enable DEBUG print
+// #define LED_OFF // LED点滅無効化
+#define DEBUG   // Enable DEBUG print
 
 #if defined(USE_MAX5696)
 #define I2C_ADDR 0x0f
@@ -145,12 +145,17 @@ void setup()
 
   for (int i = 0; i < 4; ++i)
   {
-    set_volt(dac_ch[i], 2.5);
+    set_volt(dac_ch[i], 2);
     pinMode(swPins[i], INPUT);
 #ifndef LED_OFF
    pinMode(ledPins[i], OUTPUT);
 #endif
   }
+
+  // DACきめうち
+  set_dac(dac_ch[0], 32952);
+  set_dac(dac_ch[1], 23421);
+  set_dac(dac_ch[2], 23411);
 
   Serial.println("CH1, CH2, CH3,");
 
@@ -184,7 +189,8 @@ unsigned int searchZeroPoint(int ch)
 
   for (unsigned int i = start_point; i < 0xffff; i++)
   {
-    set_dac(dac_ch[ch], i);
+    // 測定用にDAC設定を無効化（searchZeroPoint関数はLED光らせるだけになる）
+//    set_dac(dac_ch[ch], i);
     delay(2);
 
 #ifdef DEBUG
@@ -198,13 +204,13 @@ unsigned int searchZeroPoint(int ch)
 #endif
 
     // 校正チェック
-    if (analog_ave(analogPins[ch], sample) < threshold)
-    {
-#ifndef LED_OFF
-      digitalWrite(ledPins[ch], HIGH);
-#endif
-      return i;
-    }
+//    if (analog_ave(analogPins[ch], sample) < threshold)
+//    {
+//#ifndef LED_OFF
+//      digitalWrite(ledPins[ch], HIGH);
+//#endif
+//      return i;
+//    }
 
 #ifndef LED_OFF
     // 校正中はLED点滅させる
@@ -220,3 +226,4 @@ unsigned int searchZeroPoint(int ch)
 
   return 0;
 }
+// hogetarou

@@ -2,8 +2,9 @@
 // 2021/07/12
 // Haruo Noma
 
-// 2021/07/13に船橋がコメント追加
+// 2021/07/13 船橋がコメント追加
 // 2021/07/15 シンプルゼロ校正プログラム追加 written by aonrjp
+// 2021/07/23 船橋くんへの引き渡し用にコード整備
 
 #include <Wire.h>
 
@@ -81,40 +82,9 @@ void set_volt(int ch, double v)
 #endif
 }
 
-// ADC RingBuffer
-
-const int numReadings = 16;
-const int Shift = 4;          //上記numReafingsの分、シフトする量。numReafings=2^shift とする。
-int readings[3][numReadings]; // the readings from the analog input
-int readIndex = 0;            // the index of the current reading
-int total[3] = {0, 0, 0};     // the running total
-int ledPin = 13;
-
-void Read_AD(int *a)
-{
-  int i, j;
-
-  for (i = 0; i < 3; i++)
-  {
-    total[i] = total[i] - readings[i][readIndex]; // subtract the last reading:
-    readings[i][readIndex] = analogRead(i) & 0x03ff;
-    total[i] = total[i] + readings[i][readIndex]; // add the reading to the total:
-  }
-
-  readIndex = readIndex + 1; // advance to the next position in the array:
-  if (readIndex >= numReadings)
-  {                // if we're at the end of the array...
-    readIndex = 0; // ...wrap around to the beginning:
-  }
-
-  for (i = 0; i < 3; i++)
-  {
-    a[i] = total[i] >> Shift; // calculate the average:
-  }
-
-  return (1);
-}
-
+/// analog_ave
+/// 
+/// pinで指定したAnalog入力ピンの値をsample分とって平均値を返す
 int analog_ave(int pin, int sample) {
   long sum = 0;
   for(int i=0; i<sample; i++) {
@@ -127,7 +97,6 @@ int analog_ave(int pin, int sample) {
 void setup()
 {
   Serial.begin(115200);
-
   Wire.begin();
 
   delay(100);
@@ -145,54 +114,65 @@ void setup()
 
   for (int i = 0; i < 4; ++i)
   {
-    set_volt(dac_ch[i], 2);
+    // DAC初期値設定
+    set_volt(dac_ch[i], 2.0);
+    // スイッチ入力用ピンモード設定
     pinMode(swPins[i], INPUT);
 #ifndef LED_OFF
-   pinMode(ledPins[i], OUTPUT);
+    // LED出力ピン設定
+    pinMode(ledPins[i], OUTPUT);
 #endif
   }
 
-  // DACきめうち
-  set_dac(dac_ch[0], 32952);
-  set_dac(dac_ch[1], 23421);
-  set_dac(dac_ch[2], 23411);
-
+  // シリアルプロッタの凡例表示
   Serial.println("CH1, CH2, CH3,");
 
+  // 3ch分のゼロ校正を実施
   for (int i = 0; i < 3; i++)
   {
     // ゼロ校正
     set_dac(dac_ch[i], searchZeroPoint(i));
-    delay(100);
-    // 無負荷時アナログ基準値
+    // 無負荷時のアンプ出力値を読み出し
     ref_val[i] = analog_ave(analogPins[i], 32);
   }
 }
 
 void loop()
 {
+  // シリアルプロッタ向けに3ch表示
   for (int i = 0; i < 3; i++)
   {
-    // Serial.print(analogRead(analogPins[i]) - ref_val[i]);
-//     Serial.print(analogRead(analogPins[i]));
-    Serial.print(analog_ave(analogPins[i], 8));
+    // Serial.print(analogRead(analogPins[i])); // 生値表示
+    Serial.print(analog_ave(analogPins[i], 8)); // サンプル平均値表示
     Serial.print(",");
   }
   Serial.println();
 }
 
+/// searchZeroPoint
+/// 
+/// DACの出力電圧をstart_pointから順に設定し，アンプの出力電圧が
+/// 閾値電圧より低くなった時点の電圧を校正電圧値として返す．
 unsigned int searchZeroPoint(int ch)
 {
+  // DACの電圧設定開始ポイント : [volt] / [ref] * [resolution](16bit)
   unsigned int start_point = 2.0 / 5.0 * 0xffff;
-  unsigned int threshold = 500;
+  // アンプ出力電圧の閾値（10bitアナログ入力）
+  unsigned int threshold = 2.4 / 5.0 * 0x3ff;
+  // 
   unsigned int sample = 8;
 
+  
   for (unsigned int i = start_point; i < 0xffff; i++)
   {
-    // 測定用にDAC設定を無効化（searchZeroPoint関数はLED光らせるだけになる）
-//    set_dac(dac_ch[ch], i);
-    delay(2);
+    // DACの出力電圧設定
+    set_dac(dac_ch[ch], i);
 
+    // DACの設定値が反映されるまで待機（必要ないかも）
+    delay(1);
+
+// デバッグ用シリアル表示
+//   例: [ch], [アナログ入力], []
 #ifdef DEBUG
     Serial.print(ch);
     Serial.print("\t");
@@ -203,14 +183,14 @@ unsigned int searchZeroPoint(int ch)
     Serial.println(5.0*(double)i/(double)0xffff);
 #endif
 
-    // 校正チェック
-//    if (analog_ave(analogPins[ch], sample) < threshold)
-//    {
-//#ifndef LED_OFF
-//      digitalWrite(ledPins[ch], HIGH);
-//#endif
-//      return i;
-//    }
+    // アンプ出力電圧が閾値以下であればDACの設定値を返す
+   if (analog_ave(analogPins[ch], sample) < threshold)
+   {
+#ifndef LED_OFF
+     digitalWrite(ledPins[ch], HIGH);
+#endif
+     return i;
+   }
 
 #ifndef LED_OFF
     // 校正中はLED点滅させる
@@ -224,6 +204,6 @@ unsigned int searchZeroPoint(int ch)
   digitalWrite(ledPins[ch], LOW);
 #endif
 
+  // どの値をDACに設定してもアンプの出力が閾値以下にならなかった場合は0を返す
   return 0;
 }
-// hogetarou

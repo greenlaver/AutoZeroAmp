@@ -30,7 +30,7 @@ Fsamp4のDACを手動で調整するコード
 #define SW1 6
 #define SW2 7
 
-#define CH 2     //調整するDACの場所を変更  CH 1だとrefA  CH 2だとrefB  CH 4だとrefC  CH 8だとVE    15だと全部（詳しくはGitのFsamp4の部品資料に記載。）
+#define CH 1    //調整するDACの場所を変更  CH 1だとrefA  CH 2だとrefB  CH 4だとrefC  CH 8だとVE    15だと全部（詳しくはGitのFsamp4の部品資料に記載。）
 
 void DAC_write_command(byte cmd, byte dh, byte dl)
 {

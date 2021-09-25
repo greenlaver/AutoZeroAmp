@@ -2,7 +2,7 @@
 Fsamp4のDACを手動で調整するコード
 2021_9/2（木）に新Fsamp4基板（赤色）の動作確認に使用
 2021_9/24（金）に1チャンネルだけ自動でDAC調整するコード作成。二分法で行う。未完成である。
-
+2021_9/25（土）に1チャンネルだけ自動でDAC調整するコード作成が完成。原因はおそらくset_volt後にすぐReadAD2をしたから。間にdelay()を入れると正常に動作した。
  */
 
 
@@ -137,9 +137,9 @@ void setup() {
   pinMode(SW0, INPUT_PULLUP);
   pinMode(SW1, INPUT_PULLUP);
   pinMode(SW2, INPUT_PULLUP);
-  pinMode(LED0, OUTPUT); digitalWrite(LED0, 0);
-  pinMode(LED1, OUTPUT); digitalWrite(LED1, 1);
-  pinMode(LED2, OUTPUT); digitalWrite(LED2, 2);
+  pinMode(LED0, OUTPUT); digitalWrite(LED0, LOW);
+  pinMode(LED1, OUTPUT); digitalWrite(LED1, LOW);
+  pinMode(LED2, OUTPUT); digitalWrite(LED2, LOW);
 
   Wire.begin();
 #if defined(USE_MAX5696)
@@ -156,87 +156,33 @@ void setup() {
   set_volt(8, VE);  //直接VEを4.5と設定。
 }
 
-int print_flag=0;
 
-void loop() {
+void loop() {     //VE=4.5V, V0(DAC初期値)=2.0V, V1(離れた値)=2.5V, V2(目標値)=2.25Vで調整。
 
   int ADData[3];  //読み取ったデータを格納する配列。
 
   double v1 = v0 + 0.5;
   double v2;
-  int VEbit = VE/2*1024/5;
-  int z = 10;
-  set_volt(CH, v1);
-  Read_AD2(ADData);
-  Serial.print("ADData[0]:");
-  Serial.println(ADData[0]);
+  int VEbit = VE/2*1024/5;   //VE=4.5Vの時のADの値をbitで表記
+  int z = 10;                //目標値の誤差範囲をbitで表記
   
   while(abs(VEbit-ADData[0]) > z){
-    v2 = (v1+v0)/2;
+    v2 = (v1+v0)/2;    //2点の中点をとってくる
     set_volt(CH, v2);
+    delay(50);         //delay()がないとset_voltがすぐ反映されない。
     Read_AD2(ADData);  //ADの電圧読み取りメソッド呼び出し（調整用）
-    if(ADData[0] >= VEbit){
-      v0 = v2;
+    if(ADData[0] >= VEbit){  //とった中点のAD出力が 目標値(460)よりも高い場合は
+      v0 = v2;               //中点を下限に
     }
-    else {
-      v1 = v2; 
+    else {                   //そうでなければ
+      v1 = v2;               //中点を上限に
     }
-    Serial.print("v0:");
-    Serial.print(v0,5);
-    Serial.print("  ");
-    Serial.print("v1:");
-    Serial.print(v1,5);
-    Serial.print("  ");
-    Serial.print("v2:");
-    Serial.print(v2,5);
-    Serial.print("  ");
-    Serial.print("ADData[0]:");
-    Serial.println(ADData[0]);
   }
 
-//  while(1){
-//    Read_AD(ADData);
-//    Serial.println(ADData[0]); //Serial.print(' '); Serial.print(ADData[1]); Serial.print(' '); Serial.println(ADData[2]);
-//    //set_volt(CH, v2);
-//  }
-
-  
-  
-//  if (digitalRead(SW0) == 0) digitalWrite(LED0, 1); else digitalWrite(LED0, 0);
-//  if (digitalRead(SW1) == 0) digitalWrite(LED1, 1); else digitalWrite(LED1, 0);
-//  if (digitalRead(SW2) == 0) digitalWrite(LED2, 1); else digitalWrite(LED2, 0);
-//
-//  while (Serial.available()) {
-//
-//    char c = Serial.read();  //シリアルからの入力によってDACを調整
-//    if (c == '1') v -= 0.05;
-//    else if (c == '2') v -= 0.005;
-//    else if (c == '3') v -= 0.001;
-//    else if (c == '4') v -= 0.0005;
-//    else if (c == '5') v -= 0.00025;//1LSB = 0.000076V -> 3LSB
-//    else if (c == '6') v += 0.00025;
-//    else if (c == '7') v += 0.0005;
-//    else if (c == '8') v += 0.001;
-//    else if (c == '9') v += 0.005;
-//    else if (c == '0') v += 0.05;
-//   
-//    else if (c == 'a'){
-//      print_flag=1;  //計測開始。
-//    }
-//    else if (c == 's'){
-//      print_flag=0;  //計測を終了します。
-//    }
-//    if( c!= '\n'){
-//      Read_AD2(ADData);  //ADの電圧読み取りメソッド呼び出し（調整用）
-//      //Serial.print(v, 5); Serial.print(' ');
-//      Serial.print(ADData[0]); Serial.print(' '); Serial.print(ADData[1]); Serial.print(' '); Serial.println(ADData[2]);
-//      set_volt(CH, v);
-//    }
-//  }
-
-//  if (print_flag == 1){   //計測する関数を呼び出している。
-//    Read_AD(ADData);
-//    Serial.print(ADData[0]); Serial.print(' '); Serial.print(ADData[1]); Serial.print(' '); Serial.println(ADData[2]);
-//    set_volt(CH, v);
-//  }
+  while(1){           //計測用の無限ループ
+    Read_AD(ADData);
+    Serial.println(ADData[0]); //Serial.print(' '); Serial.print(ADData[1]); Serial.print(' '); Serial.println(ADData[2]);
+    set_volt(CH, v2);
+    //digitalWrite(LED0, digitalRead(SW0) );
+  }
 }

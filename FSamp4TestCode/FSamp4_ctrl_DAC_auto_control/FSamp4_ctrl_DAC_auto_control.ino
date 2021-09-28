@@ -6,6 +6,7 @@ Fsamp4のDACを手動で調整するコード
 　　　　　　　　　　　　　　　　　 追記：3チャンネル同時自動調整コードが完成した。あとはコードの関数化と計測中のエラーをLED点灯で知らせるよう追加する予定。
 2021_9/27（月）記入者：船橋　佑　3チャンネル同時自動調整コードの関数化に成功。自動計測。キーボードでsを打つと計測終了。
 　　　　　　　　　　　　　　　　　 追記：LEDコード追加。調整中は点灯しており、各chごとに調整が終わると消灯する。
+2021_9/28（火）記入者：船橋　佑　コードをreadableにするべく整形した。具体的に、むやみにグローバル変数を使用せず、#defineで定義をなるべくした。また、3チャンネル分一気に調整するのではなく。調整と3チャンネルに行う処理を分けた。
  */
 
 
@@ -27,15 +28,21 @@ Fsamp4のDACを手動で調整するコード
 #define I2C_ADDR 0x0c // A1=A0=0
 #endif
 
-//#define LED0 2
-//#define LED1 3
-//#define LED2 4
+#define LED0 2
+#define LED1 3
+#define LED2 4
+
 #define SW0 5
 #define SW1 6
 #define SW2 7
 
-int LED[] = {2,3,4};
-int CH[] = {1,2,4};    //調整するDACの場所を変更　　CH 1だとrefA  CH 2だとrefB 　CH 4だとrefC  CH 8だとVE    15だと全部（詳しくはGitのFsamp4の部品資料に記載。）
+#define REFA 1
+#define REFB 2
+#define REFC 4
+#define EXCITE 8
+
+int LED[] = {LED0, LED1, LED2};           //Arduinoのピン配置でそれぞれ2番ピン、3番ピン、4番ピンに当たる。
+int CH[] = {REFA, REFB, REFC, EXCITE};    //調整するDACの場所を変更　　CH 1だとrefA  CH 2だとrefB 　CH 4だとrefC  CH 8だとVE    15だと全部（詳しくはGitのFsamp4の部品資料に記載。）
 
 
 void DAC_write_command(byte cmd, byte dh, byte dl)
@@ -95,11 +102,9 @@ int total[3] = {0, 0, 0};          // the running total
 int total2[3] = {0, 0, 0};          // the running total
 int ledPin = 13;
 
-double VE = 4.5;
-double v0 = 2.0;  //DACの大まかな初期値を設定。目安はVEの半分よりも少ないくらい。
-int ADData[3];  //読み取ったデータを格納する配列。
 
-void Read_AD(int *a ) {    //DAC調整用の関数。リングバッファを使用
+//計測中のDACの値を読み取る関数。リングバッファを使用
+void Read_AD(int *a ) {    
   int i, j;
 
   for (i = 0, j = 2; i < 3; i++,j--) {    //アンプの出力OUTAがA2に入り、OUTCがA0に入っているため配列に入れる順番を逆さにして入れている（詳しくは回路図参照）
@@ -107,23 +112,22 @@ void Read_AD(int *a ) {    //DAC調整用の関数。リングバッファを使
     readings[i][readIndex] = analogRead(j) & 0x03ff;
     total[i] = total[i] + readings[i][readIndex];          // add the reading to the total:
   }
-
   readIndex = readIndex + 1;                    // advance to the next position in the array:
   if (readIndex >= numReadings) {               // if we're at the end of the array...
     readIndex = 0;                              // ...wrap around to the beginning:
   }
-
   for (i = 0; i < 3; i++) {
     a[i] = total[i] >> Shift;                  // calculate the average:
   }
-
   return (1);
 }
 
 
 #define STACK_NUM 8
 
-void Read_AD2(int *a ) {  //計測用の関数。過去のデータを参照せずにフィルタリングしてデータを格納している。
+
+//DAC調整時のDACの値を読み取る関数。過去のデータを参照せずにフィルタリングしてデータを格納している。
+void Read_AD2(int *a ) {  
   int i, j, k;
   int stack[3]={0,0,0};
 
@@ -132,37 +136,51 @@ void Read_AD2(int *a ) {  //計測用の関数。過去のデータを参照せ�
       stack[i] += analogRead(j) & 0x03ff;
     }
   }
-
   for (i = 0; i < 3; i++) {
     a[i]=stack[i]/STACK_NUM;
   }
 }
 
-void auto_control(int *x, int *y, int *n){    //DAC調整関数。VE=4.5V, V0(DAC初期値)=2.0V, V1(離れた値)=2.5V, V2(目標値)=2.25Vで調整。
-  double v1;
-  double v2;
+#define VE 4.5
+#define INITvl 2.0  //DACの初期値であり、二分法の下限を設定。目安はVEの半分よりも少ないくらい。
+#define INITvh 2.5  //DACの二分法の上限の値。
+int ii;             //ループを回すようのカウンタ。auto_controllとauto_control_allの二つの関数間で使用し、かつ値を変更しながら使用したいのであえてグローバル変数にしている。 
+
+
+//DAC調整関数。二分法によって求める
+void auto_control(){    
+  float vl;                  //二分法を行う時のDACの下限を入れる変数
+  float vh;                  //二分法を行う時のDACの上限を入れる変数
+  float vm;                  //二分法を行う時の中点
   int VEbit = VE/2*1024/5;   //VE=4.5Vの時のADの値をbitで表記;
-  int z= 10;                //目標値の誤差範囲をbitで表記
-  int i;
-  Read_AD2(ADData);        //初期化した値をとってくる
-  for(i=0; i<3; i++){      //3チャンネル分の調整を行う。
-    v0 = 2.0;
-    v1 = v0 + 0.5;
-    while(abs(VEbit-x[i]) > z){
-      v2 = (v1+v0)/2;    //2点の中点をとってくる
-      set_volt(y[i], v2);
-      delay(50);         //delay()がないとset_voltがすぐ反映されない。
-      Read_AD2(ADData);  //ADの電圧読み取りメソッド呼び出し（調整用）
-      if(x[i] >= VEbit){  //とった中点のAD出力が 目標値(460bit)よりも高い場合は
-        v0 = v2;               //中点を下限に
-      }
-      else {                   //そうでなければ
-        v1 = v2;               //中点を上限に
-      }
+  int z= 10;                 //目標値の誤差範囲をbitで表記
+  int ADData[3];             //読み取ったデータを格納する配列。
+  
+  Read_AD2(ADData);          //初期化した値をとってくる     
+  vl = INITvl;
+  vh = INITvh;
+  while(abs(VEbit-ADData[ii]) > z){
+    vm = (vh+vl)/2;    //2点の中点をとってくる
+    set_volt(CH[ii], vm);
+    delay(50);         //delay()がないとset_voltがすぐ反映されない。
+    Read_AD2(ADData);  //ADの電圧読み取りメソッド呼び出し（調整用）
+    if(ADData[ii] >= VEbit){  //とった中点のAD出力が 目標値(460bit)よりも高い場合は
+      vl = vm;               //中点を下限に
     }
-    digitalWrite(n[i], LOW);     //調整が終わったら、そのchに対応したLEDを消灯
+    else {                   //そうでなければ
+      vh = vm;               //中点を上限に
+    }
+  }
+  digitalWrite(LED[ii], LOW);     //調整が終わったら、そのchに対応したLEDを消灯
+}
+
+//3チャンネル分の調整を行う。
+void auto_control_all(){
+  for(ii=0; ii<3; ii++){
+    auto_control();
   }
 }
+
 
 void setup() {
   Serial.begin(9600);
@@ -184,22 +202,24 @@ void setup() {
   DAC_write_command(0x40, 0x00, 0x00); // Power up all DAC as normal
   DAC_write_command(0x70, 0x00, 0x00); // enable internal reference (default)
 #endif
-  set_volt(CH[0], v0);
-  set_volt(CH[1], v0);
-  set_volt(CH[2], v0);
-  set_volt(8, VE);  //直接VEを4.5と設定。
+  set_volt(CH[0], INITvl);
+  set_volt(CH[1], INITvl);
+  set_volt(CH[2], INITvl);
+  set_volt(EXCITE, VE);  //直接VEを4.5と設定。
 
-  auto_control(ADData,CH,LED);    //DAC調整関数呼び出し。
+  auto_control_all();    //DAC調整関数呼び出し。
   
 }
 
 int print_flag = 0;
+int ADmeasure[3];
 
-void loop() {              //計測用
+//計測用
+void loop() {              
   char c = Serial.read(); 
   if(print_flag==0){
-    Read_AD(ADData);
-    Serial.print(ADData[0]); Serial.print(' '); Serial.print(ADData[1]); Serial.print(' '); Serial.println(ADData[2]);
+    Read_AD(ADmeasure);
+    Serial.print(ADmeasure[0]); Serial.print(' '); Serial.print(ADmeasure[1]); Serial.print(' '); Serial.println(ADmeasure[2]);
   }
   if(c == 's'){      //キーボードでsが入力されると
     print_flag = 1;  //計測終了

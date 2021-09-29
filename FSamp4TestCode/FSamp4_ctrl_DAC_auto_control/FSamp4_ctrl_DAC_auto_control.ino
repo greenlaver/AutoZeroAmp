@@ -7,6 +7,7 @@ Fsamp4のDACを手動で調整するコード
 2021_9/27（月）記入者：船橋　佑　3チャンネル同時自動調整コードの関数化に成功。自動計測。キーボードでsを打つと計測終了。
 　　　　　　　　　　　　　　　　　 追記：LEDコード追加。調整中は点灯しており、各chごとに調整が終わると消灯する。
 2021_9/28（火）記入者：船橋　佑　コードをreadableにするべく整形した。具体的に、むやみにグローバル変数を使用せず、#defineで定義をなるべくした。また、3チャンネル分一気に調整するのではなく。調整と3チャンネルに行う処理を分けた。
+2021_9/29（水）記入者：船橋　佑　さらに整形。staticを使用することで、関数の中でしか使用しないが値を保持したい変数を関数の中で定義した。
  */
 
 
@@ -55,6 +56,7 @@ void DAC_write_command(byte cmd, byte dh, byte dl)
   Wire.endTransmission();
 }
 
+
 uint16_t DAC_read_reg(byte cmd)
 {
   uint8_t dh, dl;
@@ -66,8 +68,8 @@ uint16_t DAC_read_reg(byte cmd)
   while (!Wire.available()); dl = Wire.read();
   Wire.endTransmission();
   return (dh << 8 | dl);
-
 }
+
 
 void set_dac(int ch, unsigned int v)
 {
@@ -77,6 +79,7 @@ void set_dac(int ch, unsigned int v)
   DAC_write_command(0x30 | (ch), v >> 8, v & 0xff);   //+1消しました
 #endif
 }
+
 
 void set_volt(int ch, double v)
 {
@@ -90,22 +93,18 @@ void set_volt(int ch, double v)
 #endif
 }
 
-// ADC RingBuffer
-
-const int numReadings = 16;
-const int Shift = 4;    //上記numReafingsの分、シフトする量。numReafings=2^shift とする。
-int readings[3][numReadings];      // the readings from the analog input
-int readings2[3][numReadings];      // the readings from the analog input
-int readIndex = 0;                 // the index of the current reading
-int readIndex2 = 0;                 // the index of the current reading
-int total[3] = {0, 0, 0};          // the running total
-int total2[3] = {0, 0, 0};          // the running total
-int ledPin = 13;
-
 
 //計測中のDACの値を読み取る関数。リングバッファを使用
 void Read_AD(int *a ) {    
   int i, j;
+  const int numReadings = 16;
+  const int Shift = 4;    //上記numReafingsの分、シフトする量。numReafings=2^shift とする。
+  static int readings[3][numReadings];      // the readings from the analog input
+  static int readings2[3][numReadings];      // the readings from the analog input
+  static int readIndex = 0;                 // the index of the current reading
+  static int readIndex2 = 0;                 // the index of the current reading
+  static int total[3] = {0, 0, 0};          // the running total
+  static int total2[3] = {0, 0, 0};          // the running total
 
   for (i = 0, j = 2; i < 3; i++,j--) {    //アンプの出力OUTAがA2に入り、OUTCがA0に入っているため配列に入れる順番を逆さにして入れている（詳しくは回路図参照）
     total[i] = total[i] - readings[i][readIndex];          // subtract the last reading:
@@ -123,13 +122,11 @@ void Read_AD(int *a ) {
 }
 
 
-#define STACK_NUM 8
-
-
 //DAC調整時のDACの値を読み取る関数。過去のデータを参照せずにフィルタリングしてデータを格納している。
 void Read_AD2(int *a ) {  
   int i, j, k;
   int stack[3]={0,0,0};
+  const int STACK_NUM=8;
 
   for(k=0;k<STACK_NUM;++k){
     for (i = 0, j = 2; i < 3; i++,j--) {  //アンプの出力OUTAがA2に入り、OUTCがA0に入っているため配列に入れる順番を逆さにして入れている（詳しくは回路図参照）
@@ -140,6 +137,7 @@ void Read_AD2(int *a ) {
     a[i]=stack[i]/STACK_NUM;
   }
 }
+
 
 #define VE 4.5
 #define INITvl 2.0  //DACの初期値であり、二分法の下限を設定。目安はVEの半分よりも少ないくらい。
@@ -173,6 +171,7 @@ void auto_control(){
   }
   digitalWrite(LED[ii], LOW);     //調整が終わったら、そのchに対応したLEDを消灯
 }
+
 
 //3チャンネル分の調整を行う。
 void auto_control_all(){
@@ -211,12 +210,13 @@ void setup() {
   
 }
 
-int print_flag = 0;
-int ADmeasure[3];
 
 //計測用
-void loop() {              
-  char c = Serial.read(); 
+void loop() {
+  static int print_flag = 0;     //計測中を表すフラグ
+  static int ADmeasure[3];       //計測中にADから読み取ったアンプの出力の値を格納する配列
+  char c = Serial.read();        //キーボードからの文字入力を読み取る。基本的に計測終了時に使用
+  
   if(print_flag==0){
     Read_AD(ADmeasure);
     Serial.print(ADmeasure[0]); Serial.print(' '); Serial.print(ADmeasure[1]); Serial.print(' '); Serial.println(ADmeasure[2]);

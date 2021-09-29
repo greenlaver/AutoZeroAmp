@@ -218,6 +218,7 @@ void loop() {
     Serial.print(ADmeasure[0]); Serial.print(' '); Serial.print(ADmeasure[1]); Serial.print(' '); Serial.println(ADmeasure[2]);
   }
 
+  //各チャンネルに対応したボタンが押されると、そのチャンネルのDACを再調整する
   if(digitalRead(SW0) == LOW){
     digitalWrite(LED[0], HIGH);
     auto_control(0);

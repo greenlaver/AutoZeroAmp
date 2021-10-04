@@ -9,6 +9,9 @@ Fsamp4のDACを手動で調整するコード
 2021_9/28（火）記入者：船橋　佑　コードをreadableにするべく整形した。具体的に、むやみにグローバル変数を使用せず、#defineで定義をなるべくした。また、3チャンネル分一気に調整するのではなく。調整と3チャンネルに行う処理を分けた。
 2021_9/29（水）記入者：船橋　佑　さらに整形。staticを使用することで、関数の中でしか使用しないが値を保持したい変数を関数の中で定義した。
                              追記：計測中に各チャンネルに対応したボタンを押すことで再調整するコード追加。
+2021_10/1（金）記入者：船橋　佑　現在未完成。エラー処理は正しく動いたが、今度は正常時の挙動がおかしくなった。
+2021_10_4（月）記入者：船橋　佑　完成。機能の説明。初期状態として、各チャンネルに対応したLEDランプが点灯。DAC調整が完了すると。LEDランプが消灯する。また、センサが死んでいた場合、そのチャンネルのLEDランプが点滅し、Serial.printでどのチャンネルが死んでいるか表示される。
+　　　　　　　　　　　　　　　　　 そして、調整終了後に再度調整したい場合は各チャンネルに対応したボタンを押すと行われる。
  */
 
 
@@ -50,6 +53,8 @@ Fsamp4のDACを手動で調整するコード
 
 int LED[] = {LED0, LED1, LED2};           //Arduinoのピン配置でそれぞれ2番ピン、3番ピン、4番ピンに当たる。
 int CH[] = {REFA, REFB, REFC, EXCITE};    //調整するDACの場所を変更　　CH 1だとrefA  CH 2だとrefB 　CH 4だとrefC  CH 8だとVE    15だと全部（詳しくはGitのFsamp4の部品資料に記載。）
+int BUTTON[] = {SW0, SW1, SW2};
+boolean error_flag[3];                    //各チャンネルの調整時にセンサのチャンネルが死んでいたらfalseを、生きていたらtrueを格納。中身がfalseだった場合にそのチャンネルが壊れているとSerial.printする。
 
 
 void DAC_write_command(byte cmd, byte dh, byte dl)
@@ -145,41 +150,70 @@ void Read_AD2(int *a ) {
 }
 
 
+//エラー時に呼び出される関数。LED点滅してどのチャンネルが壊れているか知らせる。
+void error(int error_channel){
+  for(int i=0; i<5; i++){
+    digitalWrite(LED[error_channel],LOW);
+    delay(500);
+    digitalWrite(LED[error_channel],HIGH);
+    delay(500);
+  }
+  return;
+}
+
+
 //DAC調整関数。二分法によって求める
-void auto_control(int count){    
-  float vl;                  //二分法を行う時のDACの下限を入れる変数
-  float vh;                  //二分法を行う時のDACの上限を入れる変数
-  float vm;                  //二分法を行う時の中点
-  int VEbit = VE/2*1024/5;   //VE=4.5Vの時のADの値をbitで表記;
+boolean auto_control(int channel){    
+  float v_low;                  //二分法を行う時のDACの下限を入れる変数
+  float v_high;                  //二分法を行う時のDACの上限を入れる変数
+  float v_middle;                  //二分法を行う時の中点
+  int VE_half_bit = VE/2*1024/5;   //求めたい値（VE=4.5Vの半分の時）のADの値をbitで表記;
   int z= 10;                 //目標値の誤差範囲をbitで表記
   int ADData[3];             //読み取ったデータを格納する配列。
+  int control_counter = 0;       //何回調整をしたかカウントする。エラー処理時に使用
   
   Read_AD2(ADData);          //初期化した値をとってくる     
-  vl = INITvl;
-  vh = INITvh;
-  while(abs(VEbit-ADData[count]) > z){
-    vm = (vh+vl)/2;    //2点の中点をとってくる
-    set_volt(CH[count], vm);
+  v_low = INITvl;
+  v_high = INITvh;
+  while(abs(VE_half_bit-ADData[channel]) > z){
+    v_middle = (v_high+v_low)/2;    //2点の中点をとってくる
+    set_volt(CH[channel], v_middle);
     delay(50);         //delay()がないとset_voltがすぐ反映されない。
     Read_AD2(ADData);  //ADの電圧読み取りメソッド呼び出し（調整用）
-    if(ADData[count] >= VEbit){  //とった中点のAD出力が 目標値(460bit)よりも高い場合は
-      vl = vm;               //中点を下限に
+
+    if(ADData[channel] >= VE_half_bit){  //とった中点のAD出力が 目標値(460bit)よりも高い場合は
+      v_low = v_middle;               //中点を下限に
     }
     else {                   //そうでなければ
-      vh = vm;               //中点を上限に
+      v_high = v_middle;               //中点を上限に
+    }
+
+    if(ADData[channel] == 0){
+      control_counter++;
+    }
+    if(control_counter == 20){
+      error(channel);
+      return false;
     }
   }
-  digitalWrite(LED[count], LOW);     //調整が終わったら、そのchに対応したLEDを消灯
+  digitalWrite(LED[channel], LOW);     //調整が終わったら、そのchに対応したLEDを消灯
+  return true;
+}
+
+
+//DACの調整を3チャンネル分行う
+void auto_control_all(){
+  for(int all_channel=0; all_channel<3; all_channel++){
+      error_flag[all_channel] = auto_control(all_channel);
+  }
 }
 
 
 void setup() {
-  int i;           //auto_controllを呼び出す際のループの回数
-  
   Serial.begin(9600);
-  pinMode(SW0, INPUT_PULLUP);
-  pinMode(SW1, INPUT_PULLUP);
-  pinMode(SW2, INPUT_PULLUP);
+  pinMode(BUTTON[0], INPUT_PULLUP);
+  pinMode(BUTTON[1], INPUT_PULLUP);
+  pinMode(BUTTON[2], INPUT_PULLUP);
   pinMode(LED[0], OUTPUT); digitalWrite(LED[0], HIGH);
   pinMode(LED[1], OUTPUT); digitalWrite(LED[1], HIGH);
   pinMode(LED[2], OUTPUT); digitalWrite(LED[2], HIGH);
@@ -200,17 +234,26 @@ void setup() {
   set_volt(CH[2], INITvl);
   set_volt(EXCITE, VE);  //直接VEを4.5と設定。
 
-  //3チャンネル分呼び出す 
-  for(i = 0; i<3; i++){
-    auto_control(i);        //DAC調整関数呼び出し。
+  auto_control_all();       //3チャンネル分のDAC調整関数を呼び出している。
+
+  //センサが壊れていた時、具体的にどのチャンネルが壊れていたかを記録する。
+  if(error_flag[0] == false){
+    Serial.println("センサのch.1は壊れています");
   }
+  if(error_flag[1] == false){
+    Serial.println("センサのch.2は壊れています");
+  }
+  if(error_flag[2] == false){
+    Serial.println("センサのch.3は壊れています");
+  }
+  
 }
 
 
 //計測用
 void loop() {
-  static int print_flag = 0;     //計測中を表すフラグ
-  static int ADmeasure[3];       //計測中にADから読み取ったアンプの出力の値を格納する配列
+  int print_flag = 0;     //計測中を表すフラグ
+  int ADmeasure[3];       //計測中にADから読み取ったアンプの出力の値を格納する配列
   char c = Serial.read();        //キーボードからの文字入力を読み取る。基本的に計測終了時に使用
   
   if(print_flag == 0){

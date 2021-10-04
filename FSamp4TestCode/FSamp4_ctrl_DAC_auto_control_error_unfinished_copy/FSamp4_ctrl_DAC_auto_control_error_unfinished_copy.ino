@@ -198,21 +198,14 @@ int auto_control(int channel){
 
 
 //DACの調整を3チャンネル分行う
-int auto_control_all(int all_channel){
-  for(all_channel=0; all_channel<3; all_channel++){
-    auto_control(all_channel);
-
-    if(auto_control(all_channel) == -1){
-      return(-1);
-    }
-    
+int auto_zero_all() {
+  for(int ch=0; ch<3; ch++){
+    auto_control(ch);
   }
 }
 
 
 void setup() {
-  int i=0;           //auto_controllを呼び出す際のループの回数
-  
   Serial.begin(9600);
   pinMode(BUTTON[0], INPUT_PULLUP);
   pinMode(BUTTON[1], INPUT_PULLUP);
@@ -237,23 +230,8 @@ void setup() {
   set_volt(CH[2], INITvl);
   set_volt(EXCITE, VE);  //直接VEを4.5と設定。
 
-  auto_control_all(i);       //3チャンネル分のDAC調整関数を呼び出している。
-
-  
-  if(auto_control_all(i) == -1){      //auto_controlがエラーを検知したとき
-    error(i);                         //LED点滅で知らせる
-    i++;                              //着目チャンネルを一つずらし
-    auto_control_all(i);              //次のチャンネルを調整
-    if(auto_control_all(i) == -1){
-      error(i);
-      i++;
-      auto_control_all(i);
-      if(auto_control_all(i) == -1){
-        error(i);
-        while(1){
-        }
-      }
-    }
+  if(!auto_control_all()) {
+    while(true){};
   }
   
 }

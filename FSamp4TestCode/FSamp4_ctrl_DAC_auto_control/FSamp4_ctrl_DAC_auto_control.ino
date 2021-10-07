@@ -1,18 +1,19 @@
 /*
-Fsamp4のDACを手動で調整するコード
-2021_9/2（木） 記入者：船橋　佑　新Fsamp4基板（赤色）の動作確認に使用
-2021_9/24（金）記入者：船橋　佑　1チャンネルだけ自動でDAC調整するコード作成。二分法で行う。未完成である。
-2021_9/25（土）記入者：船橋　佑　1チャンネルだけ自動でDAC調整するコード作成が完成。原因はおそらくset_volt後にすぐReadAD2をしたから。間にdelay()を入れると正常に動作した。
-　　　　　　　　　　　　　　　　　 追記：3チャンネル同時自動調整コードが完成した。あとはコードの関数化と計測中のエラーをLED点灯で知らせるよう追加する予定。
-2021_9/27（月）記入者：船橋　佑　3チャンネル同時自動調整コードの関数化に成功。自動計測。キーボードでsを打つと計測終了。
-　　　　　　　　　　　　　　　　　 追記：LEDコード追加。調整中は点灯しており、各chごとに調整が終わると消灯する。
-2021_9/28（火）記入者：船橋　佑　コードをreadableにするべく整形した。具体的に、むやみにグローバル変数を使用せず、#defineで定義をなるべくした。また、3チャンネル分一気に調整するのではなく。調整と3チャンネルに行う処理を分けた。
-2021_9/29（水）記入者：船橋　佑　さらに整形。staticを使用することで、関数の中でしか使用しないが値を保持したい変数を関数の中で定義した。
+  Fsamp4のDACを手動で調整するコード
+  2021_9/2（木） 記入者：船橋　佑　新Fsamp4基板（赤色）の動作確認に使用
+  2021_9/24（金）記入者：船橋　佑　1チャンネルだけ自動でDAC調整するコード作成。二分法で行う。未完成である。
+  2021_9/25（土）記入者：船橋　佑　1チャンネルだけ自動でDAC調整するコード作成が完成。原因はおそらくset_volt後にすぐReadAD2をしたから。間にdelay()を入れると正常に動作した。
+  　　　　　　　　　　　　　　　　　 追記：3チャンネル同時自動調整コードが完成した。あとはコードの関数化と計測中のエラーをLED点灯で知らせるよう追加する予定。
+  2021_9/27（月）記入者：船橋　佑　3チャンネル同時自動調整コードの関数化に成功。自動計測。キーボードでsを打つと計測終了。
+  　　　　　　　　　　　　　　　　　 追記：LEDコード追加。調整中は点灯しており、各chごとに調整が終わると消灯する。
+  2021_9/28（火）記入者：船橋　佑　コードをreadableにするべく整形した。具体的に、むやみにグローバル変数を使用せず、#defineで定義をなるべくした。また、3チャンネル分一気に調整するのではなく。調整と3チャンネルに行う処理を分けた。
+  2021_9/29（水）記入者：船橋　佑　さらに整形。staticを使用することで、関数の中でしか使用しないが値を保持したい変数を関数の中で定義した。
                              追記：計測中に各チャンネルに対応したボタンを押すことで再調整するコード追加。
-2021_10/1（金）記入者：船橋　佑　現在未完成。エラー処理は正しく動いたが、今度は正常時の挙動がおかしくなった。
-2021_10_4（月）記入者：船橋　佑　完成。機能の説明。初期状態として、各チャンネルに対応したLEDランプが点灯。DAC調整が完了すると。LEDランプが消灯する。また、センサが死んでいた場合、そのチャンネルのLEDランプが点滅し、Serial.printでどのチャンネルが死んでいるか表示される。
-　　　　　　　　　　　　　　　　　 そして、調整終了後に再度調整したい場合は各チャンネルに対応したボタンを押すと行われる。
- */
+  2021_10/1（金）記入者：船橋　佑　現在未完成。エラー処理は正しく動いたが、今度は正常時の挙動がおかしくなった。
+  2021_10_4（月）記入者：船橋　佑　完成。機能の説明。初期状態として、各チャンネルに対応したLEDランプが点灯。DAC調整が完了すると。LEDランプが消灯する。また、センサが死んでいた場合、そのチャンネルのLEDランプが点滅し、Serial.printでどのチャンネルが死んでいるか表示される。
+  　　　　　　　　　　　　　　　　　 そして、調整終了後に再度調整したい場合は各チャンネルに対応したボタンを押すと行われる。
+  2021_10_7（木）記入者：船橋　佑　setupの中がごちゃついてたので関数化して整理した。
+*/
 
 
 //AD Converter 拡張
@@ -54,7 +55,7 @@ Fsamp4のDACを手動で調整するコード
 int LED[] = {LED0, LED1, LED2};           //Arduinoのピン配置でそれぞれ2番ピン、3番ピン、4番ピンに当たる。
 int CH[] = {REFA, REFB, REFC, EXCITE};    //調整するDACの場所を変更　　CH 1だとrefA  CH 2だとrefB 　CH 4だとrefC  CH 8だとVE    15だと全部（詳しくはGitのFsamp4の部品資料に記載。）
 int BUTTON[] = {SW0, SW1, SW2};
-boolean error_flag[3];                    //各チャンネルの調整時にセンサのチャンネルが死んでいたらfalseを、生きていたらtrueを格納。中身がfalseだった場合にそのチャンネルが壊れているとSerial.printする。
+boolean error_flag[3] = {true, true, true};                  //各チャンネルの調整時にセンサのチャンネルが死んでいたらfalseを、生きていたらtrueを格納。中身がfalseだった場合にそのチャンネルが壊れているとSerial.printする。
 
 
 void DAC_write_command(byte cmd, byte dh, byte dl)
@@ -106,7 +107,7 @@ void set_volt(int ch, double v)
 
 
 //計測中のDACの値を読み取る関数。リングバッファを使用
-void Read_AD(int *a ) {    
+void Read_AD(int *a ) {
   int i, j;
   const int numReadings = 16;
   const int Shift = 4;    //上記numReafingsの分、シフトする量。numReafings=2^shift とする。
@@ -117,7 +118,7 @@ void Read_AD(int *a ) {
   static int total[3] = {0, 0, 0};          // the running total
   static int total2[3] = {0, 0, 0};          // the running total
 
-  for (i = 0, j = 2; i < 3; i++,j--) {    //アンプの出力OUTAがA2に入り、OUTCがA0に入っているため配列に入れる順番を逆さにして入れている（詳しくは回路図参照）
+  for (i = 0, j = 2; i < 3; i++, j--) {   //アンプの出力OUTAがA2に入り、OUTCがA0に入っているため配列に入れる順番を逆さにして入れている（詳しくは回路図参照）
     total[i] = total[i] - readings[i][readIndex];          // subtract the last reading:
     readings[i][readIndex] = analogRead(j) & 0x03ff;
     total[i] = total[i] + readings[i][readIndex];          // add the reading to the total:
@@ -134,28 +135,28 @@ void Read_AD(int *a ) {
 
 
 //DAC調整時のDACの値を読み取る関数。過去のデータを参照せずにフィルタリングしてデータを格納している。
-void Read_AD2(int *a ) {  
+void Read_AD2(int *a ) {
   int i, j, k;
-  int stack[3]={0,0,0};
-  const int STACK_NUM=8;
+  int stack[3] = {0, 0, 0};
+  const int STACK_NUM = 8;
 
-  for(k=0;k<STACK_NUM;++k){
-    for (i = 0, j = 2; i < 3; i++,j--) {  //アンプの出力OUTAがA2に入り、OUTCがA0に入っているため配列に入れる順番を逆さにして入れている（詳しくは回路図参照）
+  for (k = 0; k < STACK_NUM; ++k) {
+    for (i = 0, j = 2; i < 3; i++, j--) { //アンプの出力OUTAがA2に入り、OUTCがA0に入っているため配列に入れる順番を逆さにして入れている（詳しくは回路図参照）
       stack[i] += analogRead(j) & 0x03ff;
     }
   }
   for (i = 0; i < 3; i++) {
-    a[i]=stack[i]/STACK_NUM;
+    a[i] = stack[i] / STACK_NUM;
   }
 }
 
 
 //エラー時に呼び出される関数。LED点滅してどのチャンネルが壊れているか知らせる。
-void error(int error_channel){
-  for(int i=0; i<5; i++){
-    digitalWrite(LED[error_channel],LOW);
+void error(int error_channel) {
+  for (int i = 0; i < 5; i++) {
+    digitalWrite(LED[error_channel], LOW);
     delay(500);
-    digitalWrite(LED[error_channel],HIGH);
+    digitalWrite(LED[error_channel], HIGH);
     delay(500);
   }
   return;
@@ -163,35 +164,35 @@ void error(int error_channel){
 
 
 //DAC調整関数。二分法によって求める
-boolean auto_control(int channel){    
+boolean auto_control(int channel) {
   float v_low;                  //二分法を行う時のDACの下限を入れる変数
   float v_high;                  //二分法を行う時のDACの上限を入れる変数
   float v_middle;                  //二分法を行う時の中点
-  int VE_half_bit = VE/2*1024/5;   //求めたい値（VE=4.5Vの半分の時）のADの値をbitで表記;
-  int z= 10;                 //目標値の誤差範囲をbitで表記
+  int VE_half_bit = VE / 2 * 1024 / 5; //求めたい値（VE=4.5Vの半分の時）のADの値をbitで表記;
+  int z = 10;                //目標値の誤差範囲をbitで表記
   int ADData[3];             //読み取ったデータを格納する配列。
   int control_counter = 0;       //何回調整をしたかカウントする。エラー処理時に使用
-  
-  Read_AD2(ADData);          //初期化した値をとってくる     
+
+  Read_AD2(ADData);          //初期化した値をとってくる
   v_low = INITvl;
   v_high = INITvh;
-  while(abs(VE_half_bit-ADData[channel]) > z){
-    v_middle = (v_high+v_low)/2;    //2点の中点をとってくる
+  while (abs(VE_half_bit - ADData[channel]) > z) {
+    v_middle = (v_high + v_low) / 2; //2点の中点をとってくる
     set_volt(CH[channel], v_middle);
     delay(50);         //delay()がないとset_voltがすぐ反映されない。
     Read_AD2(ADData);  //ADの電圧読み取りメソッド呼び出し（調整用）
 
-    if(ADData[channel] >= VE_half_bit){  //とった中点のAD出力が 目標値(460bit)よりも高い場合は
+    if (ADData[channel] >= VE_half_bit) { //とった中点のAD出力が 目標値(460bit)よりも高い場合は
       v_low = v_middle;               //中点を下限に
     }
     else {                   //そうでなければ
       v_high = v_middle;               //中点を上限に
     }
 
-    if(ADData[channel] == 0){
+    if (ADData[channel] == 0) {
       control_counter++;
     }
-    if(control_counter == 20){
+    if (control_counter == 20) {
       error(channel);
       return false;
     }
@@ -202,9 +203,41 @@ boolean auto_control(int channel){
 
 
 //DACの調整を3チャンネル分行う
-void auto_control_all(){
-  for(int all_channel=0; all_channel<3; all_channel++){
-      error_flag[all_channel] = auto_control(all_channel);
+void auto_control_all() {
+  for (int all_channel = 0; all_channel < 3; all_channel++) {
+    error_flag[all_channel] = auto_control(all_channel);
+  }
+}
+
+
+//センサが壊れていた時、具体的にどのチャンネルが壊れていたかを記録する。
+void  error_print() {
+  if (error_flag[0] == false) {
+    Serial.println("センサのch.1は壊れています");
+  }
+  if (error_flag[1] == false) {
+    Serial.println("センサのch.2は壊れています");
+  }
+  if (error_flag[2] == false) {
+    Serial.println("センサのch.3は壊れています");
+  }
+}
+
+
+//呼び出されるとそのチャンネルのLEDを点灯し、壊れていることをデータとして記録する
+void SwitchAction() {
+  if (digitalRead(SW0) == LOW) {
+    digitalWrite(LED[0], HIGH);
+    error_flag[0] = auto_control(0);
+    error_print();
+  } else if (digitalRead(SW1) == LOW) {
+    digitalWrite(LED[1], HIGH);
+    error_flag[1] = auto_control(1);
+    error_print();
+  } else if (digitalRead(SW2) == LOW) {
+    digitalWrite(LED[2], HIGH);
+    error_flag[2] = auto_control(2);
+    error_print();
   }
 }
 
@@ -236,17 +269,7 @@ void setup() {
 
   auto_control_all();       //3チャンネル分のDAC調整関数を呼び出している。
 
-  //センサが壊れていた時、具体的にどのチャンネルが壊れていたかを記録する。
-  if(error_flag[0] == false){
-    Serial.println("センサのch.1は壊れています");
-  }
-  if(error_flag[1] == false){
-    Serial.println("センサのch.2は壊れています");
-  }
-  if(error_flag[2] == false){
-    Serial.println("センサのch.3は壊れています");
-  }
-  
+  error_print();           //センサが壊れていた時、具体的にどのチャンネルが壊れていたかを記録する。
 }
 
 
@@ -255,25 +278,18 @@ void loop() {
   int print_flag = 0;     //計測中を表すフラグ
   int ADmeasure[3];       //計測中にADから読み取ったアンプの出力の値を格納する配列
   char c = Serial.read();        //キーボードからの文字入力を読み取る。基本的に計測終了時に使用
-  
-  if(print_flag == 0){
+
+  if (print_flag == 0) {
     Read_AD(ADmeasure);
     Serial.print(ADmeasure[0]); Serial.print(' '); Serial.print(ADmeasure[1]); Serial.print(' '); Serial.println(ADmeasure[2]);
   }
 
   //各チャンネルに対応したボタンが押されると、そのチャンネルのDACを再調整する
-  if(digitalRead(SW0) == LOW){
-    digitalWrite(LED[0], HIGH);
-    auto_control(0);
-  }else if(digitalRead(SW1) == LOW){
-    digitalWrite(LED[1], HIGH);
-    auto_control(1);
-  }else if(digitalRead(SW2) == LOW){
-    digitalWrite(LED[2], HIGH);
-    auto_control(2);
+  if (!digitalRead(BUTTON[0]) || !digitalRead(BUTTON[1]) || !digitalRead(BUTTON[2])) {
+    SwitchAction();
   }
-  
-  if(c == 's'){      //キーボードでsが入力されると
+
+  if (c == 's') {    //キーボードでsが入力されると
     print_flag = 1;  //計測終了
   }
 }
